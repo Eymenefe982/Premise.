@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — Giriş</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
+<style>
+  .auth-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 20px; }
+  .auth-card{
+    width:100%; max-width:440px; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:32px;
+  }
+  .auth-brand{ font-size:30px; font-weight:600; letter-spacing:-.03em; margin:0 0 4px; }
+  .auth-brand span{ color:var(--accent); }
+  .auth-tag{ color:var(--muted); font-size:14px; margin:0 0 26px; }
+
+  .seg{ display:flex; gap:4px; background:var(--surface-2); border-radius:var(--radius-sm); padding:4px; margin-bottom:24px; }
+  .seg button{
+    flex:1; border:none; background:none; cursor:pointer; padding:9px;
+    border-radius:8px; font:inherit; font-size:14px; color:var(--muted);
+  }
+  .seg button.on{ background:var(--surface); color:var(--ink); font-weight:500; box-shadow:var(--shadow-sm); }
+
+  .fld{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+  .fld > span{ font-size:13px; color:var(--ink-2); font-weight:500; }
+  .fld input, .fld select{
+    border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+    background:var(--bg); color:var(--ink); font:inherit; padding:11px 13px;
+  }
+  .fld input:focus, .fld select:focus{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+  .hint{ font-size:12px; color:var(--muted); }
+
+  .consent{
+    display:flex; gap:10px; align-items:flex-start;
+    background:var(--surface-2); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:13px; margin-bottom:20px;
+    font-size:12.5px; line-height:1.55; color:var(--ink-2);
+  }
+  .consent input{ margin-top:2px; flex:none; width:16px; height:16px; accent-color:var(--accent); }
+
+  .submit{
+    width:100%; border:none; border-radius:var(--radius-sm); cursor:pointer;
+    background:var(--accent); color:#fff; font:inherit; font-size:15px; font-weight:500;
+    padding:12px; margin-top:4px;
+  }
+  .submit:hover{ background:var(--accent-hover); }
+  .submit:disabled{ opacity:.55; cursor:default; }
+
+  .msg{ border-radius:var(--radius-sm); padding:11px 13px; font-size:13.5px; margin-bottom:16px; }
+  .msg.err{ background:#fdeceb; color:var(--danger); border:1px solid #f6c9c5; }
+  html[data-theme="dark"] .msg.err{ background:#2a1513; border-color:#5a2620; }
+
+  .foot{ margin-top:22px; padding-top:18px; border-top:1px solid var(--border); font-size:12.5px; color:var(--muted); line-height:1.6; }
+  .foot a{ color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1 class="auth-brand">Premise<span>.</span></h1>
+    <p class="auth-tag">Kanıta dayalı literatür tarama ve özetleme aracı</p>
+
+    <div class="seg">
+      <button type="button" id="tab-login" class="on">Giriş yap</button>
+      <button type="button" id="tab-signup">Hesap oluştur</button>
+    </div>
+
+    <div class="msg err" id="error" hidden></div>
+
+    <form id="form">
+      <label class="fld">
+        <span>E-posta</span>
+        <input type="email" id="email" required autocomplete="email" placeholder="ad.soyad@ornek.com">
+      </label>
+
+      <label class="fld">
+        <span>Şifre</span>
+        <input type="password" id="password" required autocomplete="current-password" minlength="8">
+        <span class="hint" id="pw-hint" hidden>En az 8 karakter olmalı.</span>
+      </label>
+
+      <label class="fld" id="role-field" hidden>
+        <span>Kim olarak kullanacaksınız?</span>
+        <select id="role">
+          <option value="physician">Hekim / araştırmacı</option>
+          <option value="student">Tıp / sağlık öğrencisi</option>
+        </select>
+        <span class="hint">Premise şu an yalnızca sağlık profesyonelleri ve öğrencilere açıktır.</span>
+      </label>
+
+      <label class="consent" id="consent-field" hidden>
+        <input type="checkbox" id="consent">
+        <span>
+          Klinik sorularımın <b>özel nitelikli kişisel veri</b> sayıldığını, arama sırasında
+          yurt dışındaki dil modeli sağlayıcılarına aktarıldığını okudum ve
+          <b>açık rızamla</b> kabul ediyorum.
+        </span>
+      </label>
+
+      <button type="submit" class="submit" id="submit">Giriş yap</button>
+    </form>
+
+    <p class="foot">
+      Premise bir literatür tarama ve özetleme aracıdır. <b>Klinik karar desteği sağlamaz</b>,
+      tanı koymaz, tedavi önermez. Üretilen her özet, kaynak makalelerle doğrulanmadan
+      klinik kararda kullanılmamalıdır.
+      <br><br>
+      <a href="/tanitim">Premise nasıl çalışır? →</a>
+    </p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const form    = document.getElementById('form');
+  const errBox  = document.getElementById('error');
+  const submit  = document.getElementById('submit');
+  const pwd     = document.getElementById('password');
+  const roleFld = document.getElementById('role-field');
+  const consFld = document.getElementById('consent-field');
+  const pwHint  = document.getElementById('pw-hint');
+  const tabIn   = document.getElementById('tab-login');
+  const tabUp   = document.getElementById('tab-signup');
+
+  let mode = 'login';
+
+  // Kayıtlı oturum varsa doğrudan uygulamaya geç.
+  fetch('/api/me').then(r => { if (r.ok) location.replace('/'); });
+
+  function setMode(next){
+    mode = next;
+    tabIn.classList.toggle('on', mode === 'login');
+    tabUp.classList.toggle('on', mode === 'signup');
+    roleFld.hidden = consFld.hidden = pwHint.hidden = (mode === 'login');
+    submit.textContent = mode === 'login' ? 'Giriş yap' : 'Hesap oluştur';
+    pwd.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+    errBox.hidden = true;
+  }
+  tabIn.addEventListener('click', () => setMode('login'));
+  tabUp.addEventListener('click', () => setMode('signup'));
+
+  function fail(text){
+    errBox.textContent = text;
+    errBox.hidden = false;
+    submit.disabled = false;
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    errBox.hidden = true;
+    submit.disabled = true;
+
+    const body = {
+      email: document.getElementById('email').value.trim(),
+      password: pwd.value,
+    };
+    if (mode === 'signup'){
+      if (!document.getElementById('consent').checked){
+        return fail('Devam etmek için açık rıza onayı vermeniz gerekiyor.');
+      }
+      body.role = document.getElementById('role').value;
+      body.kvkk_consent = true;
+    }
+
+    try {
+      const res = await fetch('/api/auth/' + (mode === 'login' ? 'login' : 'signup'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok){
+        const data = await res.json().catch(() => ({}));
+        const detail = data.detail;
+        return fail(typeof detail === 'string' ? detail
+                    : Array.isArray(detail) ? (detail[0]?.msg || 'Bilgileri kontrol edin.')
+                    : 'Bir sorun oluştu, tekrar deneyin.');
+      }
+      // Yeni kayıtta önce NCBI anahtarı sihirbazı, sonra uygulama.
+      location.replace(mode === 'signup' ? '/hesap?ilk=1' : '/');
+    } catch {
+      fail('Sunucuya ulaşılamadı.');
+    }
+  });
+
+  setMode('login');
+})();
+</script>
+</body>
+</html>

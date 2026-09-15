@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — Nasıl çalışır</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#EEF2F3; --paper:#FBFCFC; --ink:#111A1D; --ink-soft:#42555A; --ink-faint:#7C8E93;
+    --line:#D6DEE0; --line-soft:#E6ECED;
+    --brand:#12606F; --brand-deep:#0B4450; --brand-tint:#DDECEE;
+    --ok:#2B6E52; --ok-tint:#DDEDE4; --no:#9A3A2E; --no-tint:#F4E1DD;
+    --shadow:0 1px 2px rgba(10,35,40,.07), 0 10px 40px rgba(10,35,40,.07);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0C1113; --paper:#121A1D; --ink:#E6EDEE; --ink-soft:#A3B4B8; --ink-faint:#6A7C80;
+      --line:#243034; --line-soft:#1B2427;
+      --brand:#5FC0D0; --brand-deep:#8FD8E4; --brand-tint:#15292E;
+      --ok:#6FBF97; --ok-tint:#152620; --no:#D98878; --no-tint:#2A1815;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 44px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0C1113; --paper:#121A1D; --ink:#E6EDEE; --ink-soft:#A3B4B8; --ink-faint:#6A7C80;
+    --line:#243034; --line-soft:#1B2427;
+    --brand:#5FC0D0; --brand-deep:#8FD8E4; --brand-tint:#15292E;
+    --ok:#6FBF97; --ok-tint:#152620; --no:#D98878; --no-tint:#2A1815;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 44px rgba(0,0,0,.45);
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans", -apple-system, sans-serif; font-size:14px;
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  img{ max-width:100%; }
+  [hidden]{ display:none !important; }
+  .mono{ font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+
+  .frame{
+    width:100%; max-width:880px; background:var(--paper); border:1px solid var(--line);
+    border-radius:16px; box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .segments{ display:flex; gap:3px; padding:10px 10px 0; }
+  .seg{ flex:1; height:3px; background:var(--line); border-radius:2px; overflow:hidden; }
+  .seg i{ display:block; height:100%; width:0; background:var(--brand); border-radius:2px; }
+  .seg.done i{ width:100%; }
+
+  .stage{ position:relative; min-height:430px; padding:34px 42px 30px; }
+  @media (max-width:640px){ .stage{ padding:26px 22px 22px; min-height:470px; } }
+  .scene{
+    position:absolute; inset:34px 42px 30px;
+    display:flex; flex-direction:column; justify-content:center; gap:16px;
+    opacity:0; visibility:hidden;
+  }
+  @media (max-width:640px){ .scene{ inset:26px 22px 22px; } }
+  .scene.on{ opacity:1; visibility:visible; animation:rise .5s ease both; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(8px);} to{ opacity:1; transform:none;} }
+  @media (prefers-reduced-motion:reduce){ .scene.on{ animation:none; } }
+
+  .eyebrow{
+    font-family:"IBM Plex Mono", monospace; font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--brand); display:flex; align-items:center; gap:9px;
+  }
+  .eyebrow::before{ content:""; width:20px; height:1px; background:var(--brand); flex:none; }
+  h2{
+    font-family:"Spectral", Georgia, serif; font-weight:600; font-size:31px;
+    line-height:1.2; margin:0; text-wrap:balance; color:var(--ink);
+  }
+  @media (max-width:640px){ h2{ font-size:25px; } }
+  .lede{ color:var(--ink-soft); font-size:15.5px; line-height:1.62; max-width:60ch; margin:0; }
+  .lede b{ color:var(--ink); font-weight:600; }
+
+  .brandmark{ font-family:"Spectral", serif; font-weight:300; font-size:70px; line-height:1; letter-spacing:-.02em; }
+  @media (max-width:640px){ .brandmark{ font-size:52px; } }
+  .brandmark .dot{ color:var(--brand); }
+  .brandline{ font-family:"Spectral", serif; font-style:italic; font-size:20px; color:var(--ink-soft); margin:0; }
+  .stamp{
+    display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+    border:1px solid var(--line); background:var(--brand-tint); color:var(--brand-deep);
+    border-radius:999px; padding:6px 13px; font-size:12.5px;
+  }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:7px; }
+  .chip{ border:1px solid var(--line); background:var(--bg); color:var(--ink-soft); border-radius:7px; padding:5px 11px; font-size:12.5px; }
+  .chip.lit{ border-color:var(--brand); color:var(--brand-deep); background:var(--brand-tint); }
+
+  .xform{ display:flex; flex-direction:column; gap:9px; }
+  .xrow{ border:1px solid var(--line); background:var(--bg); border-radius:9px; padding:11px 14px; }
+  .xlabel{ font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:5px; }
+  .xval{ font-size:13.5px; color:var(--ink); line-height:1.5; }
+  .xval.code{ font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--brand-deep); }
+  .xarrow{ text-align:center; color:var(--ink-faint); font-size:13px; line-height:1; }
+
+  .tblwrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; min-width:430px; }
+  th{
+    text-align:left; font-family:"IBM Plex Mono", monospace; font-weight:500; font-size:10px;
+    letter-spacing:.05em; text-transform:uppercase; color:var(--ink-faint);
+    background:var(--line-soft); padding:8px 13px; white-space:nowrap;
+  }
+  td{ padding:9px 13px; border-top:1px solid var(--line-soft); color:var(--ink-soft); white-space:nowrap; }
+  td:first-child{ color:var(--ink); }
+  tr.kept td{ background:var(--ok-tint); }
+  tr.dropped td{ background:var(--no-tint); color:var(--no); text-decoration:line-through; text-decoration-thickness:1px; }
+  tr.dropped td.tag{ text-decoration:none; }
+  .tag{ font-family:"IBM Plex Mono", monospace; font-size:10.5px; }
+  .tag.y{ color:var(--ok); } .tag.n{ color:var(--no); }
+
+  .claim{ border-left:2px solid var(--brand); background:var(--bg); padding:12px 15px; border-radius:0 9px 9px 0; font-size:14px; line-height:1.6; color:var(--ink); }
+  .cite{ font-family:"IBM Plex Mono", monospace; font-size:11.5px; color:var(--brand-deep); }
+  .passage{ border:1px dashed var(--line); border-radius:9px; padding:12px 15px; font-size:13px; line-height:1.65; color:var(--ink-soft); background:var(--bg); }
+  .passage mark{ background:var(--brand-tint); color:var(--brand-deep); padding:0 3px; border-radius:3px; }
+
+  .limits{ display:flex; flex-direction:column; gap:9px; }
+  .limit{ display:flex; gap:11px; align-items:flex-start; font-size:13.5px; color:var(--ink-soft); line-height:1.55; }
+  .limit .x{
+    flex:none; width:17px; height:17px; border-radius:50%; margin-top:2px;
+    background:var(--no-tint); color:var(--no);
+    display:flex; align-items:center; justify-content:center; font-size:11px;
+  }
+
+  .fmts{ display:flex; flex-wrap:wrap; gap:7px; }
+  .fmt{ font-family:"IBM Plex Mono", monospace; font-size:11.5px; border:1px solid var(--line); border-radius:6px; padding:5px 10px; color:var(--ink-soft); background:var(--bg); }
+
+  .cta{
+    align-self:flex-start; margin-top:4px; background:var(--brand); color:#fff; border:none;
+    font-family:"IBM Plex Sans", sans-serif; font-size:14.5px; font-weight:500;
+    padding:11px 22px; border-radius:9px; cursor:pointer; text-decoration:none;
+  }
+  .cta:hover{ background:var(--brand-deep); }
+  .cta:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
+
+  .bar{ border-top:1px solid var(--line); background:var(--bg); display:flex; align-items:center; gap:10px; padding:11px 16px; }
+  .ibtn{
+    width:32px; height:32px; border-radius:8px; flex:none; border:1px solid var(--line);
+    background:var(--paper); color:var(--ink-soft);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .ibtn:hover{ color:var(--ink); border-color:var(--ink-faint); }
+  .ibtn:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+  .counter{ font-family:"IBM Plex Mono", monospace; font-size:11.5px; color:var(--ink-faint); }
+  .spacer{ flex:1; }
+  .skip{
+    background:none; border:none; cursor:pointer; color:var(--ink-faint);
+    font-family:"IBM Plex Sans", sans-serif; font-size:13px; padding:6px 8px;
+    border-radius:6px; text-decoration:none;
+  }
+  .skip:hover{ color:var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="segments" id="segments"></div>
+  <div class="stage">
+
+    <section class="scene on">
+      <div class="brandmark">Premise<span class="dot">.</span></div>
+      <p class="brandline">Her cümlenin altında kaynağı, her sayının arkasında metni.</p>
+      <p class="lede">PubMed, PubMed Central ve Europe PMC'yi aynı anda tarayan bir <b>literatür tarama ve özetleme aracı</b>. Klinik sorunuzu kendi dilinizde yazarsınız; Premise onu akademik arama diline çevirir, ücretsiz tam metinleri okur ve her iddiasının kaynağını gösteren bir rapor üretir.</p>
+      <span class="stamp">Tanı koymaz, tedavi önermez</span>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">01 · Soru</div>
+      <h2>Kendi dilinizde sorun,<br>akademik sorguya çevrilsin</h2>
+      <div class="xform">
+        <div class="xrow">
+          <div class="xlabel">Sizin sorunuz</div>
+          <div class="xval">Yaşlı atriyal fibrilasyon hastalarında DOAK'lar varfarinden daha güvenli mi?</div>
+        </div>
+        <div class="xarrow">↓</div>
+        <div class="xrow">
+          <div class="xlabel">PubMed sorgusu — MeSH terimleriyle</div>
+          <div class="xval code">("Atrial Fibrillation"[Mesh] AND "Anticoagulants"[Mesh] AND "Aged"[Mesh])</div>
+        </div>
+      </div>
+      <p class="lede">Rapor dilini siz seçersiniz: Türkçe, English, Deutsch, Français, Español.</p>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">02 · Tarama</div>
+      <h2>Üç sorgu varyantı,<br>beş kaynak, tek seferde</h2>
+      <div class="chips">
+        <span class="chip lit">PubMed</span>
+        <span class="chip lit">PubMed Central</span>
+        <span class="chip lit">Europe PMC</span>
+        <span class="chip">OpenAlex · atıf sayısı</span>
+        <span class="chip">Unpaywall · ücretsiz PDF</span>
+        <span class="chip">StatPearls</span>
+        <span class="chip">Cochrane</span>
+        <span class="chip">Kılavuzlar</span>
+      </div>
+      <p class="lede">Aynı makalenin DOI, PMID ve PMCID üzerinden gelen kopyaları tek kayıtta birleştirilir. Sonuçlar <b>güncellik, kanıt düzeyi, atıf sayısı ve erişilebilirliğe</b> göre sıralanır. Özeti olmayan kayıtlar elenir.</p>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">03 · Tam metin</div>
+      <h2>Özete değil,<br>makalenin tamamına dayanır</h2>
+      <p class="lede">En nitelikli makalelerin PubMed Central'daki <b>açık erişim tam metni</b> indirilir, bölümlerine ayrılır ve sentez bunun üzerine kurulur. Çoğu aracın yalnızca özeti okuduğu yerde Premise bulgular bölümünü de okur.</p>
+      <div class="chips">
+        <span class="chip">Kısa Yanıt</span>
+        <span class="chip">Kanıt Özeti</span>
+        <span class="chip">Tartışmalı ve Eksik Olanlar</span>
+      </div>
+      <p class="lede">Raporun her olgusal cümlesi <span class="cite">[PMID: 29127180]</span> biçiminde kaynağını taşır. Sonuç kümesinde bulunmayan bir PMID geçerse, rapor onu <b>doğrulanmamış</b> olarak işaretler.</p>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">04 · Doğrulama</div>
+      <h2>Bir sayı kaynak metinde yoksa,<br>rapora da girmez</h2>
+      <p class="lede">Her makaleden etki büyüklüğü, güven aralığı, denek sayısı ve p değeri çıkarılır — sonra her biri <b>kaynak metinde birebir aranır</b>. Bulunamayan bulgu sessizce elenir.</p>
+      <div class="tblwrap">
+        <table>
+          <thead><tr><th>Sonlanım</th><th>Ölçüt</th><th>%95 GA</th><th>Durum</th></tr></thead>
+          <tbody>
+            <tr class="kept"><td>kardiyovasküler ölüm</td><td class="mono">HR 0,86</td><td class="mono">0,79 – 0,93</td><td class="tag y">✓ metinde bulundu</td></tr>
+            <tr class="kept"><td>kalp yetmezliği yatışı</td><td class="mono">HR 0,71</td><td class="mono">0,67 – 0,77</td><td class="tag y">✓ metinde bulundu</td></tr>
+            <tr class="dropped"><td>böbrek sonlanımı</td><td class="mono">HR 0,64</td><td class="mono">0,51 – 0,80</td><td class="tag n">✕ elendi</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="lede">Ayrıca işaret hataları düzeltilir — <span class="mono">MD 136,03</span> ile <span class="mono">MD −136,03</span> zıt sonuçlardır. Oran ölçütlerinde negatif güven aralığı sınırı kabul edilmez, ters sıralanmış sınırlar düzeltilir.</p>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">05 · Kaynağı gör</div>
+      <h2>Her cümlenin dayandığı<br>paragrafı açıp okuyun</h2>
+      <div class="claim">SGLT2 inhibitörleri kalp yetmezliği yatışlarını anlamlı biçimde azaltmıştır <span class="cite">[PMID: 32865377]</span>.</div>
+      <div class="passage">…hospitalization for heart failure occurred in <mark>9.1%</mark> of patients in the treatment group versus <mark>12.4%</mark> in the placebo group <mark>(HR 0.71; 95% CI, 0.67 to 0.77)</mark>…</div>
+      <p class="lede">Eşleştirme tamamen tarayıcıda çalışır, ek model çağrısı yapılmaz. Ortak sayılar dört kat ağırlıklıdır; bir etki büyüklüğü neredeyse benzersizdir. Hiçbir paragraf yeterince eşleşmezse panel bunu <b>dürüstçe söyler</b>, uydurma bir kaynak göstermez.</p>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">06 · Sınırlar</div>
+      <h2>Premise'in yapmadıkları</h2>
+      <p class="lede">Bir aracın ne yapamadığını bilmeden ona güvenilmez. Bunlar gizlenmiyor:</p>
+      <div class="limits">
+        <div class="limit"><span class="x">✕</span><div><b>Klinik karar desteği sağlamaz.</b> Üretilen sentez, kaynak makalelerle doğrulanmadan klinik kararda kullanılmamalıdır.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Tam metin yalnızca açık erişimde.</b> Okuma, PubMed Central açık erişim koleksiyonuyla sınırlıdır.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Abonelikli içerik indirilmez.</b> UpToDate ve paywall'lı dergiler kopyalanmaz; yalnızca kendi kurumsal erişiminizle açabileceğiniz bağlantı üretilir.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Özetsiz kayıtlar değerlendirilmez.</b> Yalnızca özeti bulunan makaleler dikkate alınır.</div></div>
+      </div>
+    </section>
+
+    <section class="scene">
+      <div class="eyebrow">07 · Çıktı</div>
+      <h2>Raporu çalıştığınız<br>araca taşıyın</h2>
+      <div class="fmts">
+        <span class="fmt">PDF</span><span class="fmt">Word</span><span class="fmt">Markdown</span>
+        <span class="fmt">RIS</span><span class="fmt">BibTeX</span><span class="fmt">CSV</span>
+      </div>
+      <p class="lede">RIS dosyası <b>Zotero, Mendeley ve EndNote</b>'a doğrudan aktarılır. PDF çıktısı sayısal bulgu tablolarını ve tıklanabilir PMID / DOI bağlantılarını korur.</p>
+      <p class="lede">Aynı soru aynı ayarlarla tekrar sorulduğunda saklanan sonuç döner — <b>ücretsiz ve anında</b>. Sonuç her zaman "daha önceki bir aramadan" etiketiyle işaretlenir, yanındaki düğme taramayı baştan çalıştırır.</p>
+      <a class="cta" href="/giris">Hesap oluştur</a>
+    </section>
+
+  </div>
+
+  <div class="bar">
+    <button class="ibtn" id="play" aria-label="Duraklat veya oynat" title="Duraklat / oynat">
+      <svg id="playicon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z"/></svg>
+    </button>
+    <button class="ibtn" id="prev" aria-label="Önceki" title="Önceki">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5 8 12l7 7"/></svg>
+    </button>
+    <button class="ibtn" id="next" aria-label="Sonraki" title="Sonraki">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5 7 7-7 7"/></svg>
+    </button>
+    <span class="counter" id="counter">1 / 8</span>
+    <span class="spacer"></span>
+    <a class="skip" href="/giris">Tanıtımı geç →</a>
+  </div>
+</div>
+
+<script>
+(function(){
+  const scenes   = Array.from(document.querySelectorAll('.scene'));
+  const segments = document.getElementById('segments');
+  const counter  = document.getElementById('counter');
+  const playBtn  = document.getElementById('play');
+  const playIcon = document.getElementById('playicon');
+
+  const DUR = [7000, 9000, 9500, 11000, 13000, 11000, 12000, 12000];
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ICON_PAUSE = '<path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z"/>';
+  const ICON_PLAY  = '<path d="M8 5v14l11-7z"/>';
+
+  let i = 0, playing = !reduced, t0 = 0, raf = null, elapsed = 0;
+
+  const bars = scenes.map(() => {
+    const s = document.createElement('div');
+    s.className = 'seg';
+    s.appendChild(document.createElement('i'));
+    segments.appendChild(s);
+    return s;
+  });
+
+  function render(){
+    scenes.forEach((s, n) => s.classList.toggle('on', n === i));
+    bars.forEach((b, n) => {
+      b.classList.toggle('done', n < i);
+      if (n > i) b.firstChild.style.width = '0';
+    });
+    counter.textContent = (i + 1) + ' / ' + scenes.length;
+  }
+
+  function tick(ts){
+    if (!t0) t0 = ts;
+    const p = Math.min((elapsed + ts - t0) / DUR[i], 1);
+    bars[i].firstChild.style.width = (p * 100) + '%';
+    if (p >= 1){ go(i + 1); return; }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function start(){
+    cancelAnimationFrame(raf);
+    t0 = 0;
+    if (playing && i < scenes.length) raf = requestAnimationFrame(tick);
+  }
+
+  function go(n){
+    cancelAnimationFrame(raf);
+    elapsed = 0;
+    if (n >= scenes.length){
+      i = scenes.length - 1;
+      bars[i].firstChild.style.width = '100%';
+      playing = false;
+      playIcon.innerHTML = ICON_PLAY;
+      render();
+      return;
+    }
+    i = Math.max(0, n);
+    render();
+    start();
+  }
+
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playIcon.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+    if (playing){
+      if (i === scenes.length - 1 && bars[i].firstChild.style.width === '100%') go(0);
+      else start();
+    } else {
+      cancelAnimationFrame(raf);
+      elapsed += performance.now() - (t0 || performance.now());
+    }
+  });
+  document.getElementById('prev').addEventListener('click', () => go(i - 1));
+  document.getElementById('next').addEventListener('click', () => go(i + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight'){ e.preventDefault(); go(i + 1); }
+    if (e.key === 'ArrowLeft'){ e.preventDefault(); go(i - 1); }
+    if (e.key === ' '){ e.preventDefault(); playBtn.click(); }
+    if (e.key === 'Escape') location.href = '/giris';
+  });
+
+  render();
+  if (playing) start(); else playIcon.innerHTML = ICON_PLAY;
+})();
+</script>
+</body>
+</html>

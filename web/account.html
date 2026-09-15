@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — Hesabım</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
+<style>
+  .page{ max-width:760px; margin:0 auto; padding:28px 20px 80px; }
+  .bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+  .logo{ font-size:22px; font-weight:600; letter-spacing:-.03em; }
+  .logo span{ color:var(--accent); }
+  .bar a{ font-size:14px; }
+
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-sm);
+    padding:24px; margin-bottom:18px;
+  }
+  .card h2{ font-size:16px; margin:0 0 4px; }
+  .card .sub{ color:var(--muted); font-size:13px; margin:0 0 18px; }
+
+  .meter{ height:8px; background:var(--surface-2); border-radius:5px; overflow:hidden; margin:12px 0 8px; }
+  .meter i{ display:block; height:100%; background:var(--accent); border-radius:5px; }
+  .credits{ display:flex; align-items:baseline; gap:9px; }
+  .credits b{ font-size:30px; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+  .credits small{ color:var(--muted); font-size:13px; }
+
+  .rows{ display:flex; flex-direction:column; }
+  .row{ display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-top:1px solid var(--border); font-size:13.5px; }
+  .row:first-child{ border-top:none; }
+  .row .k{ color:var(--muted); }
+  .row .v{ color:var(--ink); text-align:right; }
+
+  ol.steps{ margin:0 0 18px; padding-left:0; list-style:none; counter-reset:s; display:flex; flex-direction:column; gap:11px; }
+  ol.steps li{ display:flex; gap:11px; counter-increment:s; font-size:14px; color:var(--ink-2); line-height:1.5; }
+  ol.steps li::before{
+    content:counter(s); flex:none; width:22px; height:22px; border-radius:50%;
+    background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:600;
+    display:flex; align-items:center; justify-content:center; margin-top:1px;
+  }
+
+  .inline{ display:flex; gap:9px; flex-wrap:wrap; }
+  .inline input{
+    flex:1; min-width:220px; border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+    background:var(--bg); color:var(--ink); font:inherit; padding:10px 12px;
+  }
+  .inline input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .btn{
+    border:none; border-radius:var(--radius-sm); cursor:pointer; font:inherit; font-size:14px;
+    padding:10px 18px; background:var(--accent); color:#fff;
+  }
+  .btn:hover{ background:var(--accent-hover); }
+  .btn.ghost{ background:var(--surface-2); color:var(--ink-2); border:1px solid var(--border); }
+  .btn.ghost:hover{ background:var(--border); }
+
+  .flag{ border-radius:var(--radius-sm); padding:10px 13px; font-size:13px; margin-top:12px; }
+  .flag.ok{ background:var(--ok-soft); color:var(--ok); }
+  .flag.err{ background:#fdeceb; color:var(--danger); }
+  html[data-theme="dark"] .flag.err{ background:#2a1513; }
+
+  .pill{
+    display:inline-block; background:var(--accent-soft); color:var(--accent);
+    border-radius:999px; padding:3px 11px; font-size:12px; font-weight:500;
+  }
+  .ledger{ font-size:13px; max-height:260px; overflow-y:auto; }
+  .ledger .amt{ font-variant-numeric:tabular-nums; }
+  .ledger .amt.plus{ color:var(--ok); }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="bar">
+    <div class="logo">Premise<span>.</span></div>
+    <div>
+      <a href="/">← Aramaya dön</a>
+      &nbsp;·&nbsp;
+      <a href="#" id="logout">Çıkış yap</a>
+    </div>
+  </div>
+
+  <!-- kayıt sonrası ilk adım -->
+  <div class="card" id="welcome" hidden>
+    <h2>Hoş geldiniz</h2>
+    <p class="sub">Başlamadan önce tek bir adım kaldı: kendi NCBI arama anahtarınız.</p>
+  </div>
+
+  <!-- NCBI anahtarı -->
+  <div class="card">
+    <h2>NCBI arama anahtarı <span class="pill" id="key-state">yok</span></h2>
+    <p class="sub">
+      NCBI, her kullanıcının kendi anahtarını kullanmasını ister. Anahtar <b>ücretsizdir</b>,
+      iki dakikada alınır ve PubMed hız sınırınızı saniyede 3 istekten 10 isteğe çıkarır.
+      Anahtarınız şifrelenerek saklanır.
+    </p>
+    <ol class="steps">
+      <li><a href="https://account.ncbi.nlm.nih.gov/settings/" target="_blank" rel="noopener">account.ncbi.nlm.nih.gov/settings</a> adresini açın</li>
+      <li>NCBI hesabı oluşturun veya Google hesabınızla giriş yapın</li>
+      <li>Sayfada <b>API Key Management</b> bölümüne inin</li>
+      <li><b>Create an API Key</b> düğmesine basın</li>
+      <li>Üretilen anahtarı kopyalayıp aşağıya yapıştırın</li>
+    </ol>
+    <div class="inline">
+      <input type="text" id="ncbi" placeholder="Örn. a1b2c3d4e5f6..." autocomplete="off" spellcheck="false">
+      <button class="btn" id="save-key">Kaydet</button>
+      <button class="btn ghost" id="skip-key">Şimdi değil</button>
+    </div>
+    <div class="flag ok" id="key-msg" hidden></div>
+  </div>
+
+  <!-- krediler -->
+  <div class="card">
+    <h2>Krediler</h2>
+    <p class="sub" id="plan-line">Yükleniyor…</p>
+    <div class="credits">
+      <b id="credits-left">—</b>
+      <small id="credits-total"></small>
+    </div>
+    <div class="meter"><i id="credits-bar" style="width:0"></i></div>
+    <div class="rows" style="margin-top:14px">
+      <div class="row"><span class="k">Bir arama kaç kredi?</span>
+        <span class="v">5 + makale sayısı + 3 × tam metin + 5 (sentez)</span></div>
+      <div class="row"><span class="k">Önbellekten gelen sonuç</span><span class="v">ücretsiz</span></div>
+      <div class="row"><span class="k">İptal edilen arama</span><span class="v">ücretsiz</span></div>
+      <div class="row"><span class="k">Dönem başlangıcı</span><span class="v" id="period">—</span></div>
+    </div>
+  </div>
+
+  <!-- kredi hareketleri -->
+  <div class="card">
+    <h2>Kredi hareketleri</h2>
+    <p class="sub">Son 50 işlem.</p>
+    <div class="rows ledger" id="ledger"><div class="row"><span class="k">Yükleniyor…</span></div></div>
+  </div>
+
+  <!-- şifre -->
+  <div class="card">
+    <h2>Şifre değiştir</h2>
+    <p class="sub">En az 8 karakter olmalı.</p>
+    <div class="inline">
+      <input type="password" id="pw-old" placeholder="Mevcut şifre" autocomplete="current-password">
+      <input type="password" id="pw-new" placeholder="Yeni şifre" autocomplete="new-password" minlength="8">
+      <button class="btn" id="save-pw">Güncelle</button>
+    </div>
+    <div class="flag" id="pw-msg" hidden></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const first = new URLSearchParams(location.search).has('ilk');
+  if (first) $('welcome').hidden = false;
+
+  function flag(el, text, ok){
+    el.textContent = text;
+    el.className = 'flag ' + (ok ? 'ok' : 'err');
+    el.hidden = false;
+  }
+
+  async function load(){
+    const res = await fetch('/api/me');
+    if (!res.ok) return location.replace('/giris');
+    const me = await res.json();
+
+    $('key-state').textContent = me.has_ncbi_key ? 'kayıtlı' : 'yok';
+    $('plan-line').textContent = me.is_admin
+      ? 'Yönetici hesabı — tüm özellikler sınırsız.'
+      : `${me.plan_label} planı · tam metin okuma ${me.fulltext_allowed ? 'açık' : 'kapalı'}`;
+    $('period').textContent = (me.period_start || '').slice(0, 10);
+
+    if (me.is_admin){
+      $('credits-left').textContent = '∞';
+      $('credits-total').textContent = 'sınırsız';
+      $('credits-bar').style.width = '100%';
+    } else {
+      $('credits-left').textContent = me.credits_left;
+      $('credits-total').textContent = `/ ${me.credits_total} kredi kaldı`;
+      const pct = me.credits_total ? (me.credits_left / me.credits_total) * 100 : 0;
+      $('credits-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+    }
+  }
+
+  async function loadLedger(){
+    const res = await fetch('/api/me/ledger');
+    if (!res.ok) return;
+    const rows = await res.json();
+    const box = $('ledger');
+    if (!rows.length){
+      box.innerHTML = '<div class="row"><span class="k">Henüz hareket yok.</span></div>';
+      return;
+    }
+    box.innerHTML = rows.map(r => `
+      <div class="row">
+        <span class="k">${r.created_at} · ${r.reason}</span>
+        <span class="v amt ${r.amount > 0 ? 'plus' : ''}">${r.amount > 0 ? '+' : ''}${r.amount}</span>
+      </div>`).join('');
+  }
+
+  $('save-key').addEventListener('click', async () => {
+    const res = await fetch('/api/me/ncbi-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: $('ncbi').value.trim() }),
+    });
+    if (res.ok){
+      flag($('key-msg'), 'Anahtar kaydedildi.', true);
+      $('ncbi').value = '';
+      load();
+      if (first) setTimeout(() => location.replace('/'), 900);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      flag($('key-msg'), typeof d.detail === 'string' ? d.detail : 'Anahtar kaydedilemedi.', false);
+    }
+  });
+
+  $('skip-key').addEventListener('click', () => {
+    if (first) location.replace('/');
+    else flag($('key-msg'), 'Anahtarsız da çalışır, yalnızca tarama biraz yavaşlar.', true);
+  });
+
+  $('save-pw').addEventListener('click', async () => {
+    const res = await fetch('/api/me/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_password: $('pw-old').value,
+        new_password: $('pw-new').value,
+      }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok){
+      flag($('pw-msg'), 'Şifreniz güncellendi.', true);
+      $('pw-old').value = $('pw-new').value = '';
+    } else {
+      flag($('pw-msg'), typeof d.detail === 'string' ? d.detail
+           : Array.isArray(d.detail) ? (d.detail[0]?.msg || 'Şifre güncellenemedi.')
+           : 'Şifre güncellenemedi.', false);
+    }
+  });
+
+  $('logout').addEventListener('click', async e => {
+    e.preventDefault();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    location.replace('/giris');
+  });
+
+  load();
+  loadLedger();
+})();
+</script>
+</body>
+</html>

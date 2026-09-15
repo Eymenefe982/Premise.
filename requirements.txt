@@ -1,0 +1,20 @@
+# Premise bağımlılıkları  ->  pip install -r requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27
+biopython>=1.83
+google-generativeai>=0.8
+python-dotenv>=1.0
+python-docx>=1.1
+reportlab>=4.0        # PDF disa aktarma
+
+# --- hesaplar ve güvenlik ---
+argon2-cffi>=23.1     # parola özetleme
+PyJWT>=2.9            # oturum jetonları
+cryptography>=43.0    # kullanıcının NCBI anahtarını şifreler
+pydantic[email]>=2.9  # API girdi doğrulama
+
+customtkinter>=5.2      # eski masaüstü arayüz (gui.pyw) için, web arayüzünde gerekmez
+
+# --- gelistirme ---
+pytest>=8.0            # py -m pytest tests -q

@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "premise",
+      "runtimeExecutable": "py",
+      "runtimeArgs": [
+        "app.py"
+      ],
+      "port": 8765,
+      "autoPort": true
+    }
+  ]
+}

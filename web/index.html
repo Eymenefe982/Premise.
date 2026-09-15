@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — Evidence-based literature assistant</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">Premise<span>.</span></span>
+    <span class="brand-sub">PubMed · PubMed Central · Europe PMC</span>
+  </div>
+  <div class="topbar-right">
+    <span id="status-pill" class="pill pill-muted">connecting…</span>
+    <a href="/hesap" class="link-btn" title="Hesabım ve krediler">Hesabım</a>
+    <button id="theme-toggle" class="icon-btn" title="Light / dark theme" aria-label="Toggle theme">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7">
+        <path class="sun" d="M12 4V2m0 20v-2m8-8h2M2 12h2m13.7-5.7 1.4-1.4M4.9 19.1l1.4-1.4m0-11.4L4.9 4.9m14.2 14.2-1.4-1.4"/>
+        <circle class="sun" cx="12" cy="12" r="4"/>
+        <path class="moon" d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- ---------------------------------------------------------- SEARCH -->
+  <section class="hero" id="hero">
+    <h1>Ask a clinical question, we gather the evidence.</h1>
+    <p class="hero-sub">
+      Your question is turned into academic search terms, then PubMed, PubMed Central and
+      Europe PMC are searched at once. Free full texts are downloaded, ranked by level of
+      evidence, and summarised with a citation behind every claim.
+    </p>
+
+    <form class="search-card" id="search-form" autocomplete="off">
+      <div class="search-row">
+        <svg class="search-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+        <input id="query" name="query" type="text" required
+               placeholder="e.g. Are DOACs safer than warfarin in elderly patients with atrial fibrillation?">
+        <button type="submit" class="btn btn-primary" id="search-btn">
+          <span class="btn-label">Search</span>
+        </button>
+      </div>
+
+      <div class="chips" id="quick-filters">
+        <button type="button" class="chip" data-filter="meta">Meta-analysis / systematic review</button>
+        <button type="button" class="chip" data-filter="rct">Randomised controlled</button>
+        <button type="button" class="chip" data-filter="guideline">Guidelines</button>
+        <button type="button" class="chip" data-filter="free_fulltext">Free full text</button>
+        <button type="button" class="chip" data-filter="humans">Human studies</button>
+        <button type="button" class="chip chip-ghost" id="toggle-advanced">Advanced ⌄</button>
+      </div>
+
+      <div class="advanced" id="advanced" hidden>
+        <label class="field">
+          <span>Author</span>
+          <input id="author" type="text" placeholder="e.g. Smith J">
+        </label>
+        <label class="field">
+          <span>Journal</span>
+          <input id="journal" type="text" placeholder="e.g. Lancet">
+        </label>
+        <label class="field">
+          <span>Published within</span>
+          <select id="recent_years">
+            <option value="3">Last 3 years</option>
+            <option value="5">Last 5 years</option>
+            <option value="10" selected>Last 10 years</option>
+            <option value="20">Last 20 years</option>
+            <option value="0">No limit</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Answer language</span>
+          <select id="language">
+            <option>English</option>
+            <option>Türkçe</option>
+            <option>Deutsch</option>
+            <option>Français</option>
+            <option>Español</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Articles to read <b id="count-label">15</b></span>
+          <input id="max_articles" type="range" min="5" max="40" value="15" step="1">
+        </label>
+        <div class="field switches">
+          <label class="switch"><input type="checkbox" id="use_fulltext" checked><span>Read PMC full text</span></label>
+          <label class="switch"><input type="checkbox" id="only_open_access"><span>Open access only</span></label>
+          <label class="switch"><input type="checkbox" id="use_clinical" checked><span>Include clinical resources</span></label>
+          <label class="switch"><input type="checkbox" id="extract_stats" checked><span>Extract numeric findings</span></label>
+        </div>
+      </div>
+    </form>
+
+    <div class="examples" id="examples">
+      <span>Try:</span>
+      <button type="button">What is the levothyroxine target in hypothyroidism during pregnancy?</button>
+      <button type="button">Do SGLT2 inhibitors improve kidney outcomes in type 2 diabetes?</button>
+      <button type="button">When is imaging indicated in paediatric febrile seizures?</button>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- PROGRESS -->
+  <section class="progress-card" id="progress" hidden>
+    <div class="progress-head">
+      <span class="spinner"></span>
+      <span id="progress-msg">Starting…</span>
+      <span class="progress-pct" id="progress-pct">0%</span>
+      <button type="button" class="btn btn-cancel" id="cancel-btn">Cancel</button>
+    </div>
+    <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+    <ol class="progress-steps" id="progress-steps"></ol>
+  </section>
+
+  <div class="error-box" id="error" hidden></div>
+
+  <!-- --------------------------------------------------------- RESULTS -->
+  <section class="results" id="results" hidden>
+    <div class="result-head">
+      <div>
+        <h2 id="result-title"></h2>
+        <p class="result-meta" id="result-meta"></p>
+      </div>
+      <div class="export-group">
+        <button class="btn btn-ghost" data-export="pdf">PDF</button>
+        <button class="btn btn-ghost" data-export="docx">Word</button>
+        <button class="btn btn-ghost" data-export="md">Markdown</button>
+        <button class="btn btn-ghost" data-export="ris">RIS</button>
+        <button class="btn btn-ghost" data-export="bib">BibTeX</button>
+        <button class="btn btn-ghost" data-export="csv">CSV</button>
+      </div>
+    </div>
+
+    <div class="evidence-notice" id="evidence-notice" hidden></div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="synthesis">Synthesis</button>
+      <button class="tab" data-tab="articles">Articles <b id="tab-count-articles">0</b></button>
+      <button class="tab" data-tab="clinical">Clinical resources <b id="tab-count-clinical">0</b></button>
+      <button class="tab" data-tab="strategy">Search strategy</button>
+    </nav>
+
+    <div class="tab-panel active" id="panel-synthesis">
+      <div class="claim-flags" id="claim-flags" hidden></div>
+      <article class="report" id="report"></article>
+      <section class="agreement" id="agreement" hidden></section>
+      <section class="bibliography" id="bibliography"></section>
+    </div>
+
+    <div class="tab-panel" id="panel-articles">
+      <div class="list-toolbar">
+        <div class="chips">
+          <button type="button" class="chip active" data-sort="score">Relevance</button>
+          <button type="button" class="chip" data-sort="year">Year</button>
+          <button type="button" class="chip" data-sort="citations">Citations</button>
+        </div>
+        <label class="switch"><input type="checkbox" id="filter-oa"><span>Free to read only</span></label>
+      </div>
+      <div id="article-list" class="cards"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-clinical">
+      <div id="clinical-content"></div>
+    </div>
+
+    <div class="tab-panel" id="panel-strategy">
+      <div id="strategy-content"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------ HISTORY / LIBRARY -->
+  <section class="side-sections">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Recent searches</h3>
+        <button class="link-btn" id="refresh-history">Refresh</button>
+      </div>
+      <div id="history-list" class="rows"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head">
+        <h3>My library</h3>
+        <button class="link-btn" id="refresh-library">Refresh</button>
+      </div>
+      <div id="library-list" class="rows"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <p>
+    Sources: PubMed, PubMed Central, Europe PMC, OpenAlex, Unpaywall, StatPearls, Cochrane, TR Dizin.
+    UpToDate requires a subscription; its content is never copied here. You only get a search link
+    to open with your own institutional access.
+  </p>
+  <p class="footer-warn">This tool is not clinical decision support. Verify every summary against the cited articles before acting on it.</p>
+</footer>
+
+<!-- ---------------------------------------------------- SOURCE DRAWER -->
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Source passages">
+  <header class="drawer-head">
+    <div>
+      <h3>Source passages</h3>
+      <p class="drawer-sub">Where this claim comes from in the article text</p>
+    </div>
+    <button class="icon-btn" id="drawer-close" title="Close" aria-label="Close">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 6 6 18M6 6l12 12"/>
+      </svg>
+    </button>
+  </header>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

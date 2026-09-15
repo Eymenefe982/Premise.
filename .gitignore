@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+history.db
+history.db-wal
+history.db-shm
+history.backup-*.db
+exports/
+.vscode/
+.pytest_cache/
+tests/__pycache__/

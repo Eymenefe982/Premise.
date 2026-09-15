@@ -1,0 +1,114 @@
+"""Parola özetleme, oturum jetonları, alan şifreleme ve istek hız sınırı."""
+from __future__ import annotations
+
+import threading
+import time
+from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
+from cryptography.fernet import Fernet, InvalidToken
+
+from .config import ACCESS_TOKEN_HOURS, REFRESH_TOKEN_DAYS
+
+_hasher = PasswordHasher()
+
+
+# --------------------------------------------------------------------- parola
+def hash_password(password: str) -> str:
+    return _hasher.hash(password)
+
+
+def verify_password(stored_hash: str, password: str) -> bool:
+    try:
+        _hasher.verify(stored_hash, password)
+        return True
+    except (VerifyMismatchError, VerificationError, InvalidHashError):
+        return False
+
+
+def needs_rehash(stored_hash: str) -> bool:
+    try:
+        return _hasher.check_needs_rehash(stored_hash)
+    except InvalidHashError:
+        return False
+
+
+# --------------------------------------------------------------------- jetonlar
+def issue_token(secret: str, user_id: int, kind: str = "access") -> str:
+    now = datetime.now(timezone.utc)
+    life = (timedelta(hours=ACCESS_TOKEN_HOURS) if kind == "access"
+            else timedelta(days=REFRESH_TOKEN_DAYS))
+    payload = {"sub": str(user_id), "typ": kind, "iat": now, "exp": now + life}
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def read_token(secret: str, token: str, kind: str = "access") -> int | None:
+    """Geçerliyse kullanıcı kimliğini, değilse None döndürür."""
+    try:
+        data = jwt.decode(token, secret, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return None
+    if data.get("typ") != kind:
+        return None
+    try:
+        return int(data["sub"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+# --------------------------------------------------------------------- şifreleme
+def encrypt(secret_key: str, value: str) -> str:
+    """Kullanıcının NCBI anahtarı gibi alanları saklamadan önce şifreler."""
+    if not value:
+        return ""
+    return Fernet(secret_key.encode()).encrypt(value.encode()).decode()
+
+
+def decrypt(secret_key: str, blob: str) -> str:
+    if not blob:
+        return ""
+    try:
+        return Fernet(secret_key.encode()).decrypt(blob.encode()).decode()
+    except (InvalidToken, ValueError):
+        return ""
+
+
+# --------------------------------------------------------------------- hız sınırı
+class Throttle:
+    """Kayan pencereli istek sayacı. Tek process içinde çalışır."""
+
+    def __init__(self, limit: int, window_seconds: float):
+        self.limit = limit
+        self.window = window_seconds
+        self._hits: dict[str, deque] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            hits = self._hits[key]
+            while hits and now - hits[0] > self.window:
+                hits.popleft()
+            if not hits and key in self._hits and len(self._hits) > 5000:
+                self._hits.pop(key, None)      # boşalan anahtarları biriktirme
+            if len(hits) >= self.limit:
+                return False
+            hits.append(now)
+            self._hits[key] = hits
+            return True
+
+    def retry_after(self, key: str) -> int:
+        with self._lock:
+            hits = self._hits.get(key)
+            if not hits:
+                return 0
+            return max(1, int(self.window - (time.monotonic() - hits[0])) + 1)
+
+
+# Giriş denemeleri kaba kuvvete karşı dar, arama ise normal kullanımı engellemeyecek kadar geniş.
+login_throttle = Throttle(limit=8, window_seconds=300)
+signup_throttle = Throttle(limit=5, window_seconds=3600)
+search_throttle = Throttle(limit=20, window_seconds=60)
