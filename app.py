@@ -43,6 +43,21 @@ if ALLOWED_ORIGINS:
         allow_headers=["Content-Type"],
     )
 
+@app.on_event("startup")
+def _init_db() -> None:
+    # uvicorn'un `app:app` ile doğrudan başlatıldığı ortamlarda (ör. Render) `main()`
+    # hiç çalışmaz; şema kurulumu bu yüzden burada, ASGI startup event'inde yapılır.
+    accounts.init()
+    removed = cache.purge_expired()
+    if removed:
+        print(f"  {removed} expired cache entries removed")
+    stale = accounts.purge_expired_tokens()
+    if stale:
+        print(f"  {stale} expired auth tokens removed")
+    if not mailer.configured():
+        print("  ! SMTP yapılandırılmamış: şifre sıfırlama e-postaları konsola yazılır.")
+
+
 ACCESS_COOKIE = "premise_session"
 REFRESH_COOKIE = "premise_refresh"
 
@@ -494,15 +509,6 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
 def main() -> None:
-    accounts.init()
-    removed = cache.purge_expired()
-    if removed:
-        print(f"  {removed} expired cache entries removed")
-    stale = accounts.purge_expired_tokens()
-    if stale:
-        print(f"  {stale} expired auth tokens removed")
-    if not mailer.configured():
-        print("  ! SMTP yapılandırılmamış: şifre sıfırlama e-postaları konsola yazılır.")
     # Canlıda sunucu 0.0.0.0'a ve platformun verdiği porta bağlanır; yerelde eski
     # davranış (127.0.0.1:8765 ve tarayıcıyı aç) korunur.
     host = os.getenv("HOST", "127.0.0.1")
