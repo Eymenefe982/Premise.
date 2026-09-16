@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — E-posta doğrulama</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/auth.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1 class="auth-brand">Premise<span>.</span></h1>
+    <p class="auth-tag">E-posta doğrulama</p>
+
+    <div class="msg info" id="state">Doğrulanıyor…</div>
+    <p class="alt-link"><a href="/">Premise'e dön</a></p>
+    <p class="foot">
+      Premise bir literatür tarama ve özetleme aracıdır. <b>Klinik karar desteği sağlamaz</b>,
+      tanı koymaz, tedavi önermez.
+      <br><br>
+      <a href="/giris">Giriş sayfasına dön →</a>
+    </p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const token = new URLSearchParams(location.search).get('token') || '';
+  const box = document.getElementById('state');
+
+  function set(cls, text){ box.className = 'msg ' + cls; box.textContent = text; }
+
+  if (!token) { set('err', 'Bağlantıda doğrulama kodu yok.'); return; }
+
+  fetch('/api/auth/verify', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ token: token })
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      set('ok', 'E-posta adresiniz doğrulandı. Premise\'i kullanmaya başlayabilirsiniz.');
+      setTimeout(() => (location.href = '/'), 2500);
+    } else {
+      set('err', data.detail || 'Doğrulama bağlantısı geçersiz ya da süresi dolmuş. ' +
+                 'Hesap sayfanızdan yeni bir bağlantı isteyebilirsiniz.');
+    }
+  }).catch(() => set('err', 'Sunucuya ulaşılamadı.'));
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 """Parola özetleme, oturum jetonları, alan şifreleme ve istek hız sınırı."""
 from __future__ import annotations
 
+import hashlib
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -37,16 +39,19 @@ def needs_rehash(stored_hash: str) -> bool:
 
 
 # --------------------------------------------------------------------- jetonlar
-def issue_token(secret: str, user_id: int, kind: str = "access") -> str:
+def issue_token(secret: str, user_id: int, kind: str = "access", epoch: int = 0) -> str:
+    """`epoch`, hesabın oturum kuşağıdır: şifre değişince artar ve o ana kadar
+    verilmiş bütün jetonlar geçersizleşir."""
     now = datetime.now(timezone.utc)
     life = (timedelta(hours=ACCESS_TOKEN_HOURS) if kind == "access"
             else timedelta(days=REFRESH_TOKEN_DAYS))
-    payload = {"sub": str(user_id), "typ": kind, "iat": now, "exp": now + life}
+    payload = {"sub": str(user_id), "typ": kind, "gen": int(epoch),
+               "iat": now, "exp": now + life}
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def read_token(secret: str, token: str, kind: str = "access") -> int | None:
-    """Geçerliyse kullanıcı kimliğini, değilse None döndürür."""
+def read_token(secret: str, token: str, kind: str = "access") -> tuple[int, int] | None:
+    """Geçerliyse (kullanıcı kimliği, oturum kuşağı), değilse None döndürür."""
     try:
         data = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.PyJWTError:
@@ -54,9 +59,24 @@ def read_token(secret: str, token: str, kind: str = "access") -> int | None:
     if data.get("typ") != kind:
         return None
     try:
-        return int(data["sub"])
+        return int(data["sub"]), int(data.get("gen", 0))
     except (KeyError, TypeError, ValueError):
         return None
+
+
+# ------------------------------------------------------- tek kullanımlık jetonlar
+def new_secret_token() -> str:
+    """Şifre sıfırlama / e-posta doğrulama bağlantısındaki rastgele değer."""
+    return secrets.token_urlsafe(32)
+
+
+def token_fingerprint(token: str) -> str:
+    """Jetonun veritabanında saklanan biçimi.
+
+    Ham jeton saklanmaz: veritabanı sızarsa saklanan değerle hesap ele geçirilememeli.
+    Jeton zaten yüksek entropili olduğu için parola özetlemesi (argon2) gereksiz,
+    SHA-256 yeterli ve hızlıdır."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 # --------------------------------------------------------------------- şifreleme
@@ -112,3 +132,6 @@ class Throttle:
 login_throttle = Throttle(limit=8, window_seconds=300)
 signup_throttle = Throttle(limit=5, window_seconds=3600)
 search_throttle = Throttle(limit=20, window_seconds=60)
+# Şifre sıfırlama dar tutulur: bu uç, bir e-posta adresinin kayıtlı olup
+# olmadığını yoklamak ve gelen kutusunu doldurmak için de kullanılabilir.
+reset_throttle = Throttle(limit=4, window_seconds=900)

@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
     report_id INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON credit_ledger(user_id, id DESC);
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    fingerprint TEXT PRIMARY KEY,      -- jetonun kendisi değil, SHA-256 özeti
+    user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                -- reset | verify
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth_tokens(user_id, kind);
 """
 
 
@@ -65,6 +73,12 @@ def init() -> None:
         for table in ("reports", "library"):
             if "user_id" not in _column_names(table):
                 c.execute(f"ALTER TABLE {table} ADD COLUMN user_id INTEGER NOT NULL DEFAULT 1")
+        user_columns = _column_names("users")
+        # session_epoch: şifre değişince artar, o ana kadarki bütün oturumları düşürür.
+        if "session_epoch" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0")
+        if "email_verified_at" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN email_verified_at TEXT")
         c.commit()
     migrate_library()
     with _lock:
@@ -139,6 +153,17 @@ def authenticate(email: str, password: str) -> dict | None:
         conn().execute("UPDATE users SET last_login_at = ? WHERE id = ?", (_now(), user["id"]))
         conn().commit()
     return by_id(user["id"])
+
+
+def bump_session_epoch(user_id: int) -> None:
+    """Hesabın bütün açık oturumlarını düşürür (şifre değişimi ve sıfırlama sonrası).
+
+    Şifre değişip eski jetonlar geçerli kalırsa, hesabı ele geçiren birini dışarı
+    atmanın yolu olmaz: asıl senaryo tam da budur."""
+    with _lock:
+        conn().execute("UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?",
+                       (user_id,))
+        conn().commit()
 
 
 def set_password(user_id: int, password: str) -> None:
@@ -311,6 +336,60 @@ def ledger(user_id: int, limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+# ------------------------------------------------------ tek kullanımlık jetonlar
+def issue_auth_token(user_id: int, kind: str, lifetime: timedelta) -> str:
+    """Şifre sıfırlama / e-posta doğrulama jetonu üretir ve özetini saklar.
+
+    Aynı türdeki eski jetonlar iptal edilir: kullanıcı üst üste üç kez "şifremi
+    unuttum" derse yalnızca son bağlantı çalışsın, gelen kutusunda çalışan üç ayrı
+    bağlantı birikmesin.
+    """
+    raw = security.new_secret_token()
+    expires = (datetime.now() + lifetime).strftime("%Y-%m-%d %H:%M:%S")
+    with _lock:
+        conn().execute("DELETE FROM auth_tokens WHERE user_id = ? AND kind = ?",
+                       (user_id, kind))
+        conn().execute(
+            "INSERT INTO auth_tokens (fingerprint, user_id, kind, expires_at)"
+            " VALUES (?,?,?,?)",
+            (security.token_fingerprint(raw), user_id, kind, expires))
+        conn().commit()
+    return raw
+
+
+def consume_auth_token(raw: str, kind: str) -> int | None:
+    """Jetonu tek seferlik harcar; geçerliyse kullanıcı kimliğini döndürür."""
+    if not raw:
+        return None
+    fingerprint = security.token_fingerprint(raw)
+    with _lock:
+        row = conn().execute(
+            "SELECT user_id, expires_at, used_at FROM auth_tokens"
+            " WHERE fingerprint = ? AND kind = ?", (fingerprint, kind)).fetchone()
+        if row is None or row["used_at"]:
+            return None
+        if datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.now():
+            return None
+        conn().execute("UPDATE auth_tokens SET used_at = ? WHERE fingerprint = ?",
+                       (_now(), fingerprint))
+        conn().commit()
+    return int(row["user_id"])
+
+
+def purge_expired_tokens() -> int:
+    with _lock:
+        cursor = conn().execute("DELETE FROM auth_tokens WHERE expires_at < ?", (_now(),))
+        conn().commit()
+    return cursor.rowcount or 0
+
+
+def mark_email_verified(user_id: int) -> None:
+    with _lock:
+        conn().execute("UPDATE users SET email_verified_at = ? WHERE id = ?",
+                       (_now(), user_id))
+        conn().commit()
+
+
 # --------------------------------------------------------------------- API görünümü
 def public(user: dict) -> dict:
     """Arayüze gönderilebilecek alanlar. Parola özeti ve şifreli anahtar dışarı çıkmaz."""
@@ -326,6 +405,7 @@ def public(user: dict) -> dict:
         "credits_left": balance(user),
         "fulltext_allowed": True if is_admin(user) else plan["fulltext"],
         "has_ncbi_key": bool(user.get("ncbi_key_enc")),
+        "email_verified": bool(user.get("email_verified_at")),
         "period_start": user["period_start"],
         "created_at": user["created_at"],
     }

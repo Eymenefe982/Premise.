@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — Şifre sıfırlama</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/auth.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1 class="auth-brand">Premise<span>.</span></h1>
+    <p class="auth-tag">Şifre sıfırlama</p>
+
+    <div class="msg err" id="error" hidden></div>
+    <div class="msg ok" id="done" hidden></div>
+
+    <!-- Bağlantısı olmayan kullanıcı: sıfırlama iste -->
+    <form id="request-form">
+      <p class="auth-lead">
+        Hesabınızın e-posta adresini yazın. Adres kayıtlıysa, şifrenizi yenilemek için
+        tek kullanımlık bir bağlantı göndeririz.
+      </p>
+      <label class="fld">
+        <span>E-posta</span>
+        <input type="email" id="email" required autocomplete="email" placeholder="ad.soyad@ornek.com">
+      </label>
+      <button type="submit" class="submit" id="request-submit">Sıfırlama bağlantısı gönder</button>
+    </form>
+
+    <!-- Bağlantıdan gelen kullanıcı: yeni şifre belirle -->
+    <form id="reset-form" hidden>
+      <p class="auth-lead">Yeni şifrenizi belirleyin. Kaydedince diğer cihazlardaki
+        oturumlarınız kapatılır.</p>
+      <label class="fld">
+        <span>Yeni şifre</span>
+        <input type="password" id="password" required autocomplete="new-password" minlength="8">
+        <span class="hint">En az 8 karakter olmalı.</span>
+      </label>
+      <label class="fld">
+        <span>Yeni şifre (tekrar)</span>
+        <input type="password" id="password2" required autocomplete="new-password" minlength="8">
+      </label>
+      <button type="submit" class="submit" id="reset-submit">Şifreyi değiştir ve giriş yap</button>
+    </form>
+
+    <p class="alt-link"><a href="/giris">Giriş sayfasına dön</a></p>
+    <p class="foot">
+      Premise bir literatür tarama ve özetleme aracıdır. <b>Klinik karar desteği sağlamaz</b>,
+      tanı koymaz, tedavi önermez.
+      <br><br>
+      <a href="/giris">Giriş sayfasına dön →</a>
+    </p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const token = new URLSearchParams(location.search).get('token') || '';
+  const err = document.getElementById('error');
+  const ok  = document.getElementById('done');
+  const requestForm = document.getElementById('request-form');
+  const resetForm   = document.getElementById('reset-form');
+
+  function show(box, text){ box.textContent = text; box.hidden = false; }
+  function clear(){ err.hidden = true; ok.hidden = true; }
+
+  if (token) { requestForm.hidden = true; resetForm.hidden = false; }
+
+  requestForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clear();
+    const btn = document.getElementById('request-submit');
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/auth/forgot', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: document.getElementById('email').value.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { show(err, data.detail || 'İstek gönderilemedi.'); btn.disabled = false; return; }
+      requestForm.hidden = true;
+      show(ok, 'Bu adres kayıtlıysa sıfırlama bağlantısı gönderildi. Gelen kutunuzu ve ' +
+               'gereksiz posta klasörünü kontrol edin. Bağlantı kısa süre geçerlidir.');
+    } catch (_) {
+      show(err, 'Sunucuya ulaşılamadı.'); btn.disabled = false;
+    }
+  });
+
+  resetForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clear();
+    const pw  = document.getElementById('password').value;
+    const pw2 = document.getElementById('password2').value;
+    if (pw !== pw2) { show(err, 'Şifreler birbirini tutmuyor.'); return; }
+    const btn = document.getElementById('reset-submit');
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/auth/reset', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token: token, new_password: pw })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { show(err, data.detail || 'Şifre değiştirilemedi.'); btn.disabled = false; return; }
+      location.href = '/';
+    } catch (_) {
+      show(err, 'Sunucuya ulaşılamadı.'); btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

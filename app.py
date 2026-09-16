@@ -12,6 +12,7 @@ import queue
 import threading
 import uuid
 import webbrowser
+from datetime import timedelta
 from typing import Any
 
 import uvicorn
@@ -20,14 +21,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from litrag import accounts, cache, exporters, security, store
+from litrag import accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
                            GEMINI_API_KEYS, GEMINI_MODEL, GROQ_API_KEY, NCBI_API_KEY,
-                           NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, WEB_DIR)
+                           NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
+                           RESET_TOKEN_MINUTES, VERIFY_TOKEN_HOURS, WEB_DIR)
 from litrag.pdf import to_pdf
 from litrag.pipeline import SearchCancelled, SearchRequest, run_search
-from litrag.schemas import (ExportIn, GrantIn, LibraryIn, LoginIn, NcbiKeyIn,
-                            PasswordChangeIn, SearchIn, SignupIn)
+from litrag.schemas import (ExportIn, ForgotPasswordIn, GrantIn, LibraryIn, LoginIn,
+                            NcbiKeyIn, PasswordChangeIn, ResetPasswordIn, SearchIn,
+                            SignupIn, VerifyEmailIn)
 
 app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None)
 
@@ -56,24 +59,37 @@ def _set_cookie(response: Response, name: str, token: str, max_age: int) -> None
 
 def _login_response(response: Response, user: dict) -> dict:
     secret = accounts.jwt_secret()
+    epoch = int(user.get("session_epoch") or 0)
     _set_cookie(response, ACCESS_COOKIE,
-                security.issue_token(secret, user["id"], "access"),
+                security.issue_token(secret, user["id"], "access", epoch),
                 ACCESS_TOKEN_HOURS * 3600)
     _set_cookie(response, REFRESH_COOKIE,
-                security.issue_token(secret, user["id"], "refresh"),
+                security.issue_token(secret, user["id"], "refresh", epoch),
                 REFRESH_TOKEN_DAYS * 86400)
     return accounts.public(user)
 
 
+def _user_from_cookie(request: Request, cookie: str, kind: str) -> dict | None:
+    """Jetonu çözer ve oturum kuşağını hesabınkiyle karşılaştırır.
+
+    Kuşak eşleşmezse jeton bir şifre değişiminden önce verilmiş demektir; süresi
+    dolmamış olsa bile kabul edilmez."""
+    token = request.cookies.get(cookie, "")
+    claim = security.read_token(accounts.jwt_secret(), token, kind) if token else None
+    if claim is None:
+        return None
+    user_id, epoch = claim
+    user = accounts.by_id(user_id)
+    if user is None or int(user.get("session_epoch") or 0) != epoch:
+        return None
+    return user
+
+
 def current_user(request: Request) -> dict:
     """Oturum çerezini doğrular. Geçersizse 401 verir."""
-    token = request.cookies.get(ACCESS_COOKIE, "")
-    user_id = security.read_token(accounts.jwt_secret(), token, "access") if token else None
-    if user_id is None:
-        raise HTTPException(401, "Oturum bulunamadı, lütfen giriş yapın.")
-    user = accounts.by_id(user_id)
+    user = _user_from_cookie(request, ACCESS_COOKIE, "access")
     if user is None:
-        raise HTTPException(401, "Hesap bulunamadı.")
+        raise HTTPException(401, "Oturum bulunamadı, lütfen giriş yapın.")
     return accounts.roll_period(user)
 
 
@@ -97,6 +113,7 @@ async def signup(body: SignupIn, request: Request, response: Response) -> dict:
                                     consented=body.kvkk_consent)
     except ValueError as exc:
         raise HTTPException(409, str(exc))
+    _send_verification(user)
     return _login_response(response, user)
 
 
@@ -115,9 +132,7 @@ async def login(body: LoginIn, request: Request, response: Response) -> dict:
 
 @app.post("/api/auth/refresh")
 async def refresh(request: Request, response: Response) -> dict:
-    token = request.cookies.get(REFRESH_COOKIE, "")
-    user_id = security.read_token(accounts.jwt_secret(), token, "refresh") if token else None
-    user = accounts.by_id(user_id) if user_id else None
+    user = _user_from_cookie(request, REFRESH_COOKIE, "refresh")
     if user is None:
         raise HTTPException(401, "Oturum süresi doldu, lütfen tekrar giriş yapın.")
     return _login_response(response, user)
@@ -137,10 +152,77 @@ async def me(user: dict = Depends(current_user)) -> dict:
 
 
 @app.post("/api/me/password")
-async def change_password(body: PasswordChangeIn, user: dict = Depends(current_user)) -> dict:
+async def change_password(body: PasswordChangeIn, response: Response,
+                          user: dict = Depends(current_user)) -> dict:
     if not security.verify_password(user["password_hash"], body.current_password):
         raise HTTPException(400, "Mevcut şifre hatalı.")
     accounts.set_password(user["id"], body.new_password)
+    # Diğer cihazlardaki oturumlar düşer; bu tarayıcıya yeni çerez verilir.
+    accounts.bump_session_epoch(user["id"])
+    _login_response(response, accounts.by_id(user["id"]))
+    return {"ok": True, "sessions_revoked": True}
+
+
+# ------------------------------------------------- şifre sıfırlama ve doğrulama
+def _send_verification(user: dict) -> None:
+    token = accounts.issue_auth_token(user["id"], "verify",
+                                      timedelta(hours=VERIFY_TOKEN_HOURS))
+    mailer.send_email_verification(user["email"], token, VERIFY_TOKEN_HOURS)
+
+
+@app.post("/api/auth/forgot")
+async def forgot_password(body: ForgotPasswordIn, request: Request) -> dict:
+    """Her durumda aynı yanıtı verir.
+
+    "Bu e-posta kayıtlı değil" demek, bir adresin sistemde olup olmadığını herkese
+    sorulabilir hale getirir; hekimlerin kullandığı bir üründe bu tek başına bir
+    mahremiyet sızıntısıdır."""
+    if not security.reset_throttle.allow(_client_key(request)):
+        raise HTTPException(429, "Çok fazla sıfırlama isteği. Lütfen biraz bekleyin.")
+    user = accounts.by_email(str(body.email))
+    if user is not None:
+        token = accounts.issue_auth_token(user["id"], "reset",
+                                          timedelta(minutes=RESET_TOKEN_MINUTES))
+        mailer.send_password_reset(user["email"], token, RESET_TOKEN_MINUTES)
+    return {"ok": True, "message": "Bu adres kayıtlıysa sıfırlama bağlantısı gönderildi."}
+
+
+@app.post("/api/auth/reset")
+async def reset_password(body: ResetPasswordIn, request: Request,
+                         response: Response) -> dict:
+    if not security.reset_throttle.allow(_client_key(request)):
+        raise HTTPException(429, "Çok fazla deneme. Lütfen biraz bekleyin.")
+    user_id = accounts.consume_auth_token(body.token, "reset")
+    if user_id is None:
+        raise HTTPException(400, "Bağlantı geçersiz ya da süresi dolmuş. "
+                                 "Yeni bir sıfırlama bağlantısı isteyin.")
+    accounts.set_password(user_id, body.new_password)
+    # Sıfırlamanın asıl amacı hesabı geri almaktır: eski oturumlar kapatılmalı.
+    accounts.bump_session_epoch(user_id)
+    user = accounts.by_id(user_id)
+    # Şifresini sıfırlayabilen kişi zaten e-posta kutusuna erişmiştir.
+    if user is not None and not user.get("email_verified_at"):
+        accounts.mark_email_verified(user_id)
+        user = accounts.by_id(user_id)
+    return _login_response(response, user)
+
+
+@app.post("/api/auth/verify")
+async def verify_email(body: VerifyEmailIn) -> dict:
+    user_id = accounts.consume_auth_token(body.token, "verify")
+    if user_id is None:
+        raise HTTPException(400, "Doğrulama bağlantısı geçersiz ya da süresi dolmuş.")
+    accounts.mark_email_verified(user_id)
+    return {"ok": True}
+
+
+@app.post("/api/auth/resend-verification")
+async def resend_verification(request: Request, user: dict = Depends(current_user)) -> dict:
+    if user.get("email_verified_at"):
+        return {"ok": True, "already_verified": True}
+    if not security.reset_throttle.allow(_client_key(request)):
+        raise HTTPException(429, "Çok fazla istek. Lütfen biraz bekleyin.")
+    _send_verification(user)
     return {"ok": True}
 
 
@@ -202,6 +284,11 @@ async def start_search(body: SearchIn, request: Request,
                        user: dict = Depends(current_user)) -> dict:
     if not security.search_throttle.allow(str(user["id"])):
         raise HTTPException(429, "Çok hızlı arama yapıyorsunuz, lütfen biraz bekleyin.")
+    if REQUIRE_EMAIL_VERIFICATION and not user.get("email_verified_at") \
+            and not accounts.is_admin(user):
+        raise HTTPException(403, "Arama yapmadan önce e-posta adresinizi doğrulayın. "
+                                 "Doğrulama bağlantısını hesap sayfanızdan yeniden "
+                                 "isteyebilirsiniz.")
 
     payload = body.model_dump()
     # Ücretsiz katmanda tam metin okuma kapalıdır — en pahalı adım budur.
@@ -393,6 +480,16 @@ async def account_page() -> FileResponse:
     return _page("account.html")
 
 
+@app.get("/sifre-sifirla")
+async def reset_page() -> FileResponse:
+    return _page("reset.html")
+
+
+@app.get("/eposta-dogrula")
+async def verify_page() -> FileResponse:
+    return _page("verify.html")
+
+
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 
@@ -401,6 +498,11 @@ def main() -> None:
     removed = cache.purge_expired()
     if removed:
         print(f"  {removed} expired cache entries removed")
+    stale = accounts.purge_expired_tokens()
+    if stale:
+        print(f"  {stale} expired auth tokens removed")
+    if not mailer.configured():
+        print("  ! SMTP yapılandırılmamış: şifre sıfırlama e-postaları konsola yazılır.")
     # Canlıda sunucu 0.0.0.0'a ve platformun verdiği porta bağlanır; yerelde eski
     # davranış (127.0.0.1:8765 ve tarayıcıyı aç) korunur.
     host = os.getenv("HOST", "127.0.0.1")

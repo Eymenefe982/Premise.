@@ -79,6 +79,27 @@ ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(","
 # Canlıda 1 olmalı: oturum çerezi yalnızca HTTPS üzerinden gönderilir.
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0").strip() not in ("0", "false", "False")
 
+# Kullanıcıya gönderilen bağlantılarda kullanılan genel adres.
+APP_URL = os.getenv("APP_URL", "http://127.0.0.1:8765").strip().rstrip("/")
+
+# --- İşlemsel e-posta (SMTP konuşan her sağlayıcı çalışır) ---
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "1").strip() not in ("0", "false", "False")
+MAIL_FROM = os.getenv("MAIL_FROM", "").strip()
+
+# Şifre sıfırlama bağlantısı kısa ömürlüdür: çalınmış bir e-posta kutusunun
+# değeri zamanla düşsün.
+RESET_TOKEN_MINUTES = int(os.getenv("RESET_TOKEN_MINUTES", "45"))
+VERIFY_TOKEN_HOURS = int(os.getenv("VERIFY_TOKEN_HOURS", "48"))
+
+# Açıkken doğrulanmamış e-postayla arama yapılamaz. Mevcut hesapları kırmamak için
+# varsayılan kapalı; ödeme açılmadan önce 1 yapılmalı.
+REQUIRE_EMAIL_VERIFICATION = os.getenv("REQUIRE_EMAIL_VERIFICATION", "0").strip() \
+    not in ("0", "false", "False")
+
 # --- Kredi sistemi ---
 # kredi = TABAN + makale sayısı + TAM_METIN_KREDI × tam metin + SENTEZ_KREDI + DOGRULAMA
 CREDIT_BASE = 5

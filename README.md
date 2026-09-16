@@ -22,13 +22,14 @@ Tarayıcı `http://127.0.0.1:8765` adresinde otomatik açılır. Windows'ta `bas
 | Aşama | Açıklama |
 |---|---|
 | 1. Çeviri | Soru, Gemini ile İngilizce akademik ifadeye ve MeSH terimli bir PubMed sorgusuna çevrilir |
-| 2. Tarama | 3 sorgu varyantı × PubMed + Europe PMC eş zamanlı çalışır |
+| 2. Tarama | 3 sorgu varyantı × PubMed + Europe PMC eş zamanlı çalışır. Yayın türü filtreleri **her iki kaynağa da** uygulanır |
 | 3. Birleştirme | Aynı makalenin DOI / PMID / PMCID kopyaları tek kayıtta toplanır |
 | 4. Zenginleştirme | OpenAlex'ten atıf sayısı, Unpaywall'dan ücretsiz PDF bağlantısı eklenir |
 | 5. Sıralama | Güncellik + kanıt düzeyi + atıf + erişilebilirlik puanı hesaplanır |
 | 6. Tam metin | En nitelikli makalelerin PubMed Central tam metni indirilip özete değil **makalenin tamamına** dayanan sentez yapılır |
 | 7. Sayısal çıkarım | Her makaleden etki büyüklüğü, güven aralığı, denek sayısı ve p değeri yapılandırılmış olarak çekilir (sentezle eş zamanlı çalışır, süre eklemez) |
-| 8. Doğrulama | Raporda geçen her PMID sonuç kümesiyle karşılaştırılır; her sayı kaynak metinde birebir aranır, bulunamayan bulgu elenir |
+| 6. Triyaj | Her aday makale, soruyu gerçekten ele alıp almadığına göre 0-2 arası notlanır. Cevabın hangi güvenle yazılacağı bu sayıya bağlıdır |
+| 8. Doğrulama | Raporda geçen her PMID sonuç kümesiyle karşılaştırılır; her sayı kaynak metinde birebir aranır, bulunamayan bulgu elenir; Kısa Cevap'ın her cümlesi atıf verdiği makaleye karşı ayrıca sınanır |
 
 Tarama sırasında **Cancel** düğmesi vardır. Arayüz anında serbest kalır, hat bir sonraki
 kontrol noktasında durur ve iptal edilen tarama geçmişe kaydedilmez.
@@ -55,6 +56,74 @@ Bu sayılar modele yazdırılmaz, doğrulanır:
 
 Elenen bulgu sayısı konsola yazılır. Bu katman, "yapay zekâ sayı uydurdu" riskini
 ölçülebilir biçimde düşürür ve aracın diğer literatür araçlarından ayrıldığı noktadır.
+
+## Cevap ne zaman verilmez
+
+Bir literatür aracının en tehlikeli hatası boş dönmek değil, **az ya da alakasız makaleden
+kendinden emin bir cevap üretmektir**. Kaynaklı göründüğü için okuyucu onu daha da ciddiye
+alır. Premise bunu üç kademeyle önler:
+
+| Kademe | Koşul | Çıktı |
+|---|---|---|
+| **Tam** | En az 3 makale soruyu doğrudan araştırıyor ve toplam en az 5 alakalı makale var | Klinik çıkarım bölümü dahil tam sentez |
+| **Sınırlı** | En az 3 alakalı makale var, ama doğrudan araştıran az | Klinik çıkarım bölümü **yazılmaz**; her çalışma tek tek aktarılır |
+| **Cevap yok** | 3'ten az alakalı makale | Sentez hiç çalışmaz, kredi düşülmez; bulunan kayıtlar ve soruyu yeniden ifade önerileri gösterilir |
+
+Kademeyi belirleyen sayı, kullanıcının kaç makale istediğinden bağımsızdır. Bir cevabın
+sağlamlığı talebe değil, elde gerçekten ne olduğuna bağlıdır: kullanıcı bilerek 3 makale
+istediyse bile cevap 3 makaleye dayanıyordur.
+
+Alakayı iki katman ölçer. Önce kelime düzeyinde örtüşme (bedava, model çağrısı yok), sonra
+sentezden önce çalışan bir triyaj adımı her makaleyi 0-2 arası notlar. Bu, hattın en sessiz
+hata biçimini hedefler: sorgu çevirisi bozulduğunda sistem alakasız ama *gerçek* makaleler
+getirir ve eski davranışta model onlardan kaynaklı bir rapor yazardı.
+
+Ölçülen etki: "Kırmızı ayakkabı giymenin miyokard enfarktüsü riskine etkisi nedir?" sorusu
+25 kayıt getiriyor (düşme önleme, kalsiyum takviyesi, karar destek araçları). Eski davranış
+bunlardan bir rapor yazıyordu; yeni davranış triyajda durup cevap üretmiyor.
+
+## İddia doğrulama
+
+`validate_citations` yalnızca PMID'in sonuç kümesinde olup olmadığına bakar: uydurulmuş bir
+numarayı yakalar, ama **gerçek bir makaleye yanlış bir iddia atfedilmesini** yakalayamaz.
+Asıl klinik risk ikincisidir.
+
+Bu yüzden Kısa Cevap bölümündeki her cümle, atıf verdiği makalenin metnine karşı ayrıca
+sınanır ve üç sonuçtan biri verilir: *supported*, *partial* (kaynağı aşıyor), *unsupported*
+(kaynakta yok). Son ikisi arayüzde raporun üstünde listelenir ve dışa aktarılan belgeye de
+yazılır.
+
+Gerçek bir yakalama örneği: model "SGLT2 inhibitörleri ejeksiyon fraksiyonundan **ve diyabet
+durumundan** bağımsız olarak mortaliteyi azaltır" cümlesini iki makaleye atıfla yazdı;
+denetçi "atıf verilen metin ejeksiyon fraksiyonunu destekliyor ama diyabet durumundan söz
+etmiyor" diyerek işaretledi.
+
+## Yön uyuşması
+
+Her makaleden çıkarılan etki büyüklüğü ve güven aralığı elde olduğu için, aynı sonlanımı
+bildiren çalışmaların **yönü aritmetikle** hesaplanabilir. "3 çalışma azalma, 1 çalışma
+anlamsız" tablosu hiçbir model çağrısı kullanmaz; dolayısıyla dil modeli çalışmalar arasında
+olmayan bir uzlaşı uyduramaz, çünkü uzlaşıyı model değil uygulama hesaplar.
+
+Güven aralığı etkisizlik noktasını (oranlarda 1, farklarda 0) kesiyorsa sonuç "anlamsız"
+sayılır. Bileşik sonlanımlar bileşenleriyle birleştirilmez: "kardiyovasküler ölüm veya kalp
+yetmezliği yatışı" ile "kalp yetmezliği yatışı" ayrı satırlardır, yoksa uyuşma olduğundan
+güçlü görünürdü.
+
+## Kapsam ve filtre dürüstlüğü
+
+- Her sonucun başında **kaç kaydın sorguya uyduğu** yazar. "1.240 kayıttan en nitelikli 15'i
+  okundu" ile "uyan 4 kayıt vardı, dördü de okundu" tamamen farklı iki cevaptır.
+- Yayın türü filtreleri hem PubMed hem Europe PMC sorgusuna girer. Ayrıca havuz birleştikten
+  sonra her kayıt **yeniden** denetlenir: kaynakların `pub_types` metadatası aynı değildir ve
+  genişletme turu filtreyi bilerek kaldırır.
+- Filtreye uymayan kayıt silinmez, `Filtre dışı` etiketiyle işaretlenir ve sıralamada geri
+  çekilir. Yayın türü bilgisi boş gelen kayıtlar `Türü belirsiz` sayılır, "uymuyor" değil.
+- `humans` filtresi yalnızca PubMed'e uygulanır. Ölçüm: Europe PMC'de `heart failure`
+  1.299.575 kayıt döndürürken `MESH:"Humans"` eklenince 23.601'e düşüyor (%2) — Europe PMC'nin
+  MeSH indekslemesi bu filtreyi taşıyacak kapsamda değil.
+- Sentez tam metne mi yoksa yalnızca özete mi dayandı, makale başına rozetle görünür.
+  Özetler sonuçları olduğundan güçlü gösterme eğilimindedir.
 
 ## Önbellek
 
@@ -169,6 +238,7 @@ pip install -r requirements.txt
 ```
 app.py                  FastAPI sunucusu ve JSON API
 cli.py                  Terminal arayüzü
+tests/                  py -m pytest tests -q
 web/                    Tek sayfa arayüz (bağımlılıksız HTML + CSS + JS, İngilizce)
 assets/fonts/           PDF için gömülü DejaVu Sans yazı tipleri
 litrag/
@@ -176,6 +246,9 @@ litrag/
   llm.py                Gemini anahtar havuzu, çeviri, sentez, atıf doğrulama
   extract.py            Sayısal sonuç çıkarımı ve kaynak metne karşı doğrulama
   models.py             Makale modeli, birleştirme ve puanlama
+  selection.py          Filtre doğrulama, konu örtüşmesi, kanıt kotalı seçim
+  agreement.py          Çalışmalar arası yön uyuşması (model çağrısı yok)
+  mailer.py             İşlemsel e-posta (SMTP; sağlayıcıdan bağımsız)
   store.py              SQLite geçmiş ve kütüphane
   cache.py              Arama önbelleği (normalleştirilmiş sorgu anahtarı, 7 gün)
   exporters.py          Word / RIS / BibTeX / Markdown / CSV
@@ -193,6 +266,8 @@ litrag/
 
 - Üretilen sentez, kaynak makalelerle doğrulanmadan klinik kararda kullanılmamalıdır.
   Araç klinik karar desteği sağlamaz.
+- Doğrulama katmanları hatayı azaltır, sıfırlamaz. Triyaj bir makaleyi yanlış notlayabilir,
+  iddia denetçisi bir aşırı genellemeyi kaçırabilir. Rozetler ve uyarılar okunmak içindir.
 - Yalnızca özeti bulunan makaleler dikkate alınır; özetsiz kayıtlar elenir.
 - Tam metin okuma yalnızca PubMed Central açık erişim koleksiyonu için mümkündür.
 - Abonelikli içerik (UpToDate, paywall'lı dergiler) indirilmez; erişim kendi kurumsal

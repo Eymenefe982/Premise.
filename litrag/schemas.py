@@ -33,6 +33,19 @@ class PasswordChangeIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=16, max_length=256)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailIn(BaseModel):
+    token: str = Field(min_length=16, max_length=256)
+
+
 class NcbiKeyIn(BaseModel):
     api_key: str = Field(default="", max_length=120)
 
