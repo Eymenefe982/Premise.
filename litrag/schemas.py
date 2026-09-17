@@ -18,7 +18,7 @@ def _clean_email(v: object) -> str:
     try:
         return validate_email(str(v), check_deliverability=False).normalized
     except EmailNotValidError:
-        raise ValueError("Geçerli bir e-posta adresi girin.")
+        raise ValueError("Enter a valid email address.")
 
 
 class SignupIn(BaseModel):
@@ -36,7 +36,7 @@ class SignupIn(BaseModel):
     @classmethod
     def must_consent(cls, v: bool) -> bool:
         if not v:
-            raise ValueError("Kayıt için açık rıza onayı gereklidir.")
+            raise ValueError("Consent is required to sign up.")
         return v
 
 
@@ -76,7 +76,7 @@ class NcbiKeyIn(BaseModel):
     def clean(cls, v: str) -> str:
         v = v.strip()
         if v and not v.replace("-", "").isalnum():
-            raise ValueError("NCBI anahtarı yalnızca harf, rakam ve tire içerebilir.")
+            raise ValueError("The NCBI key can only contain letters, digits and hyphens.")
         return v
 
 
@@ -100,7 +100,7 @@ class SearchIn(BaseModel):
     def known_filters(cls, v: list[str]) -> list[str]:
         unknown = [f for f in v if f not in FILTERS]
         if unknown:
-            raise ValueError(f"Bilinmeyen filtre: {', '.join(unknown)}")
+            raise ValueError(f"Unknown filter: {', '.join(unknown)}")
         return v
 
 

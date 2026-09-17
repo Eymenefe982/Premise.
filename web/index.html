@@ -16,7 +16,7 @@
   </div>
   <div class="topbar-right">
     <span id="status-pill" class="pill pill-muted">connecting…</span>
-    <a href="/hesap" class="link-btn" title="Hesabım ve krediler">Hesabım</a>
+    <a href="/hesap" class="link-btn" title="My account and credits">My account</a>
     <button id="theme-toggle" class="icon-btn" title="Light / dark theme" aria-label="Toggle theme">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7">
         <path class="sun" d="M12 4V2m0 20v-2m8-8h2M2 12h2m13.7-5.7 1.4-1.4M4.9 19.1l1.4-1.4m0-11.4L4.9 4.9m14.2 14.2-1.4-1.4"/>
@@ -27,7 +27,21 @@
   </div>
 </header>
 
-<main>
+<!-- ------------------------------------------------------ VERIFICATION GATE -->
+<section class="verify-gate" id="verify-gate" hidden>
+  <div class="verify-card">
+    <h2>Verify your email to search</h2>
+    <p>We've sent a confirmation link to your inbox. Click it, then reload this page.
+       Didn't get it? Check your spam folder, or request a new one below.</p>
+    <div class="verify-actions">
+      <button type="button" class="btn btn-primary" id="verify-resend">Resend verification email</button>
+      <a href="/hesap" class="link-btn">Go to my account</a>
+    </div>
+    <div class="flag" id="verify-gate-msg" hidden></div>
+  </div>
+</section>
+
+<main id="main">
   <!-- ---------------------------------------------------------- SEARCH -->
   <section class="hero" id="hero">
     <h1>Ask a clinical question, we gather the evidence.</h1>

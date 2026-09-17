@@ -142,7 +142,7 @@ def create_user(email: str, password: str, role: str, plan: str = "free",
             )
             conn().commit()
         except sqlite3.IntegrityError:
-            raise ValueError("Bu e-posta adresi zaten kayıtlı.")
+            raise ValueError("This email address is already registered.")
     return by_id(int(cur.lastrowid))
 
 

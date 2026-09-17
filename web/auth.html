@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="tr" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premise — Giriş</title>
+<title>Premise — Sign in</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
 <link rel="stylesheet" href="/static/auth.css">
@@ -13,58 +13,59 @@
 <div class="auth-wrap">
   <div class="auth-card">
     <h1 class="auth-brand">Premise<span>.</span></h1>
-    <p class="auth-tag">Kanıta dayalı literatür tarama ve özetleme aracı</p>
+    <p class="auth-tag">Evidence-based literature search and summarisation tool</p>
 
     <div class="seg">
-      <button type="button" id="tab-login" class="on">Giriş yap</button>
-      <button type="button" id="tab-signup">Hesap oluştur</button>
+      <button type="button" id="tab-login" class="on">Sign in</button>
+      <button type="button" id="tab-signup">Create account</button>
     </div>
 
     <div class="msg err" id="error" hidden></div>
 
     <form id="form">
       <label class="fld">
-        <span>E-posta</span>
-        <input type="email" id="email" required autocomplete="email" placeholder="ad.soyad@ornek.com">
+        <span>Email</span>
+        <input type="email" id="email" required autocomplete="email" placeholder="jane.doe@example.com">
       </label>
 
       <label class="fld">
-        <span>Şifre</span>
+        <span>Password</span>
         <input type="password" id="password" required autocomplete="current-password" minlength="8">
-        <span class="hint" id="pw-hint" hidden>En az 8 karakter olmalı.</span>
+        <span class="hint" id="pw-hint" hidden>Must be at least 8 characters.</span>
       </label>
 
       <label class="fld" id="role-field" hidden>
-        <span>Kim olarak kullanacaksınız?</span>
+        <span>How will you be using it?</span>
         <select id="role">
-          <option value="physician">Hekim / araştırmacı</option>
-          <option value="student">Tıp / sağlık öğrencisi</option>
+          <option value="physician">Physician / researcher</option>
+          <option value="student">Medical / health student</option>
         </select>
-        <span class="hint">Premise şu an yalnızca sağlık profesyonelleri ve öğrencilere açıktır.</span>
+        <span class="hint">Premise is currently open to health professionals and students only.</span>
       </label>
 
       <label class="consent" id="consent-field" hidden>
         <input type="checkbox" id="consent">
         <span>
-          Klinik sorularımın <b>özel nitelikli kişisel veri</b> sayıldığını, arama sırasında
-          yurt dışındaki dil modeli sağlayıcılarına aktarıldığını okudum ve
-          <b>açık rızamla</b> kabul ediyorum.
+          I understand that my clinical questions are treated as <b>special-category personal
+          data</b>, are sent to language model providers outside my country during search, and
+          I <b>explicitly consent</b> to this.
         </span>
       </label>
 
-      <button type="submit" class="submit" id="submit">Giriş yap</button>
+      <button type="submit" class="submit" id="submit">Sign in</button>
     </form>
 
     <p class="alt-link" id="forgot-line">
-      <a href="/sifre-sifirla">Şifremi unuttum</a>
+      <a href="/sifre-sifirla">Forgot password?</a>
     </p>
 
     <p class="foot">
-      Premise bir literatür tarama ve özetleme aracıdır. <b>Klinik karar desteği sağlamaz</b>,
-      tanı koymaz, tedavi önermez. Üretilen her özet, kaynak makalelerle doğrulanmadan
-      klinik kararda kullanılmamalıdır.
+      Premise is a literature search and summarisation tool. <b>It is not clinical decision
+      support</b>, does not diagnose, and does not recommend treatment. Every generated
+      summary must be verified against the cited articles before it is used in a clinical
+      decision.
       <br><br>
-      <a href="/tanitim">Premise nasıl çalışır? →</a>
+      <a href="/tanitim">How does Premise work? →</a>
     </p>
   </div>
 </div>
@@ -83,7 +84,7 @@
 
   let mode = 'login';
 
-  // Kayıtlı oturum varsa doğrudan uygulamaya geç.
+  // If a session is already active, go straight to the app.
   fetch('/api/me').then(r => { if (r.ok) location.replace('/'); });
 
   function setMode(next){
@@ -91,7 +92,7 @@
     tabIn.classList.toggle('on', mode === 'login');
     tabUp.classList.toggle('on', mode === 'signup');
     roleFld.hidden = consFld.hidden = pwHint.hidden = (mode === 'login');
-    submit.textContent = mode === 'login' ? 'Giriş yap' : 'Hesap oluştur';
+    submit.textContent = mode === 'login' ? 'Sign in' : 'Create account';
     pwd.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     errBox.hidden = true;
   }
@@ -115,7 +116,7 @@
     };
     if (mode === 'signup'){
       if (!document.getElementById('consent').checked){
-        return fail('Devam etmek için açık rıza onayı vermeniz gerekiyor.');
+        return fail('You must give explicit consent to continue.');
       }
       body.role = document.getElementById('role').value;
       body.kvkk_consent = true;
@@ -131,16 +132,16 @@
       if (!res.ok){
         const detail = data.detail;
         return fail(typeof detail === 'string' ? detail
-                    : Array.isArray(detail) ? (detail[0]?.msg || 'Bilgileri kontrol edin.')
-                    : 'Bir sorun oluştu, tekrar deneyin.');
+                    : Array.isArray(detail) ? (detail[0]?.msg || 'Please check your details.')
+                    : 'Something went wrong, please try again.');
       }
-      // Yeni kayıtta önce NCBI anahtarı sihirbazı; geçici şifreyle girende önce kalıcı
-      // şifre belirleme, aksi halde doğrudan uygulama.
+      // New signups go through the NCBI key wizard first; a temporary password
+      // means a permanent one must be set first, otherwise straight into the app.
       const dest = mode === 'signup' ? '/hesap?ilk=1'
                  : data.must_change_password ? '/hesap' : '/';
       location.replace(dest);
     } catch {
-      fail('Sunucuya ulaşılamadı.');
+      fail('Could not reach the server.');
     }
   });
 

@@ -42,29 +42,29 @@ def _token_in(body: str) -> str:
 
 
 def _temp_password_in(body: str) -> str:
-    return body.split("oluşturuldu:\n\n")[1].split("\n")[0]
+    return body.split("created for your")[1].split(":\n\n")[1].split("\n")[0]
 
 
-# ------------------------------------------------------------------------ kayıt
+# ------------------------------------------------------------------------ signup
 def test_signup_sends_verification_and_welcome_and_logs_in(client, outbox):
     res = client.post("/api/auth/signup", json=SIGNUP)
     assert res.status_code == 200
     assert res.json()["email_verified"] is False
-    assert len(outbox) == 2              # doğrulama + hoş geldiniz
+    assert len(outbox) == 2              # verification + welcome
     assert client.get("/api/me").status_code == 200
 
 
-def test_invalid_email_is_rejected_with_turkish_message(client, outbox):
+def test_invalid_email_is_rejected_with_clear_message(client, outbox):
     bad = {**SIGNUP, "email": "gecersiz-adres"}
     res = client.post("/api/auth/signup", json=bad)
     assert res.status_code == 422
-    assert "Geçerli bir e-posta adresi girin." in res.text
+    assert "Enter a valid email address." in res.text
     assert not outbox
 
 
 def test_verification_token_works_once(client, outbox):
     client.post("/api/auth/signup", json=SIGNUP)
-    verify_mail = next(m for m in outbox if "doğrulayın" in m[1])
+    verify_mail = next(m for m in outbox if "Verify your" in m[1])
     token = _token_in(verify_mail[2])
     assert client.post("/api/auth/verify", json={"token": token}).status_code == 200
     assert client.get("/api/me").json()["email_verified"] is True

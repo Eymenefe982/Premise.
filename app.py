@@ -106,13 +106,13 @@ def current_user(request: Request) -> dict:
     """Oturum çerezini doğrular. Geçersizse 401 verir."""
     user = _user_from_cookie(request, ACCESS_COOKIE, "access")
     if user is None:
-        raise HTTPException(401, "Oturum bulunamadı, lütfen giriş yapın.")
+        raise HTTPException(401, "No active session, please sign in.")
     return accounts.roll_period(user)
 
 
 def require_admin(user: dict = Depends(current_user)) -> dict:
     if not accounts.is_admin(user):
-        raise HTTPException(403, "Bu işlem için yönetici yetkisi gerekir.")
+        raise HTTPException(403, "Administrator access is required for this action.")
     return user
 
 
@@ -124,7 +124,7 @@ def _client_key(request: Request) -> str:
 @app.post("/api/auth/signup")
 async def signup(body: SignupIn, request: Request, response: Response) -> dict:
     if not security.signup_throttle.allow(_client_key(request)):
-        raise HTTPException(429, "Çok fazla kayıt denemesi. Bir süre sonra tekrar deneyin.")
+        raise HTTPException(429, "Too many signup attempts. Please try again later.")
     try:
         user = accounts.create_user(str(body.email), body.password, body.role,
                                     consented=body.kvkk_consent)
@@ -140,11 +140,11 @@ async def login(body: LoginIn, request: Request, response: Response) -> dict:
     key = f"{_client_key(request)}:{body.email}"
     if not security.login_throttle.allow(key):
         raise HTTPException(
-            429, "Çok fazla başarısız giriş denemesi. Lütfen biraz bekleyin.",
+            429, "Too many failed login attempts. Please wait a moment.",
             headers={"Retry-After": str(security.login_throttle.retry_after(key))})
     user = accounts.authenticate(str(body.email), body.password)
     if user is None:
-        raise HTTPException(401, "E-posta veya şifre hatalı.")
+        raise HTTPException(401, "Incorrect email or password.")
     return _login_response(response, user)
 
 
@@ -152,7 +152,7 @@ async def login(body: LoginIn, request: Request, response: Response) -> dict:
 async def refresh(request: Request, response: Response) -> dict:
     user = _user_from_cookie(request, REFRESH_COOKIE, "refresh")
     if user is None:
-        raise HTTPException(401, "Oturum süresi doldu, lütfen tekrar giriş yapın.")
+        raise HTTPException(401, "Your session has expired, please sign in again.")
     return _login_response(response, user)
 
 
@@ -173,7 +173,7 @@ async def me(user: dict = Depends(current_user)) -> dict:
 async def change_password(body: PasswordChangeIn, response: Response,
                           user: dict = Depends(current_user)) -> dict:
     if not security.verify_password(user["password_hash"], body.current_password):
-        raise HTTPException(400, "Mevcut şifre hatalı.")
+        raise HTTPException(400, "Current password is incorrect.")
     accounts.set_password(user["id"], body.new_password)
     # Diğer cihazlardaki oturumlar düşer; bu tarayıcıya yeni çerez verilir.
     accounts.bump_session_epoch(user["id"])
@@ -199,19 +199,19 @@ async def forgot_password(body: ForgotPasswordIn, request: Request) -> dict:
     Bağlantı yerine doğrudan giriş yapılabilir bir geçici şifre gönderilir; kullanıcı
     onunla giriş yapıp hesabından kalıcı bir şifre belirler (`must_change_password`)."""
     if not security.reset_throttle.allow(_client_key(request)):
-        raise HTTPException(429, "Çok fazla sıfırlama isteği. Lütfen biraz bekleyin.")
+        raise HTTPException(429, "Too many reset requests. Please wait a moment.")
     user = accounts.by_email(str(body.email))
     if user is not None:
         temp_password = accounts.issue_temp_password(user["id"])
         mailer.send_temp_password(user["email"], temp_password)
-    return {"ok": True, "message": "Bu adres kayıtlıysa geçici bir şifre gönderildi."}
+    return {"ok": True, "message": "If this address is registered, a temporary password has been sent."}
 
 
 @app.post("/api/auth/verify")
 async def verify_email(body: VerifyEmailIn) -> dict:
     user_id = accounts.consume_auth_token(body.token, "verify")
     if user_id is None:
-        raise HTTPException(400, "Doğrulama bağlantısı geçersiz ya da süresi dolmuş.")
+        raise HTTPException(400, "This verification link is invalid or has expired.")
     accounts.mark_email_verified(user_id)
     return {"ok": True}
 
@@ -221,7 +221,7 @@ async def resend_verification(request: Request, user: dict = Depends(current_use
     if user.get("email_verified_at"):
         return {"ok": True, "already_verified": True}
     if not security.reset_throttle.allow(_client_key(request)):
-        raise HTTPException(429, "Çok fazla istek. Lütfen biraz bekleyin.")
+        raise HTTPException(429, "Too many requests. Please wait a moment.")
     _send_verification(user)
     return {"ok": True}
 
@@ -283,12 +283,12 @@ def _worker(job_id: str, req: SearchRequest, user_id: int, reserved: int) -> Non
 async def start_search(body: SearchIn, request: Request,
                        user: dict = Depends(current_user)) -> dict:
     if not security.search_throttle.allow(str(user["id"])):
-        raise HTTPException(429, "Çok hızlı arama yapıyorsunuz, lütfen biraz bekleyin.")
+        raise HTTPException(429, "You're searching too fast, please slow down a moment.")
     if REQUIRE_EMAIL_VERIFICATION and not user.get("email_verified_at") \
             and not accounts.is_admin(user):
-        raise HTTPException(403, "Arama yapmadan önce e-posta adresinizi doğrulayın. "
-                                 "Doğrulama bağlantısını hesap sayfanızdan yeniden "
-                                 "isteyebilirsiniz.")
+        raise HTTPException(403, "Please verify your email address before searching. "
+                                 "You can request a new verification link from your "
+                                 "account page.")
 
     payload = body.model_dump()
     # Ücretsiz katmanda tam metin okuma kapalıdır — en pahalı adım budur.
@@ -301,9 +301,9 @@ async def start_search(body: SearchIn, request: Request,
     needed = accounts.max_cost_of(req)
     if not accounts.reserve(user["id"], needed):
         left = accounts.balance(user)
-        raise HTTPException(402, f"Bu arama için {needed} kredi gerekiyor, "
-                                 f"{left} krediniz kaldı. Planınızı yükseltebilir "
-                                 f"veya ek kredi alabilirsiniz.")
+        raise HTTPException(402, f"This search needs {needed} credits, you have "
+                                 f"{left} left. You can upgrade your plan or "
+                                 f"buy extra credits.")
 
     job_id = uuid.uuid4().hex[:12]
     _jobs[job_id] = {"events": queue.Queue(), "user_id": user["id"]}
@@ -315,9 +315,9 @@ async def start_search(body: SearchIn, request: Request,
 def _own_job(job_id: str, user: dict) -> dict:
     job = _jobs.get(job_id)
     if job is None:
-        raise HTTPException(404, "Arama bulunamadı.")
+        raise HTTPException(404, "Search not found.")
     if job["user_id"] != user["id"] and not accounts.is_admin(user):
-        raise HTTPException(403, "Bu arama size ait değil.")
+        raise HTTPException(403, "This search does not belong to you.")
     return job
 
 
@@ -355,7 +355,7 @@ async def history(limit: int = 50, user: dict = Depends(current_user)) -> list[d
 async def report(report_id: int, user: dict = Depends(current_user)) -> dict:
     data = store.get_report(report_id, user["id"])
     if not data:
-        raise HTTPException(404, "Rapor bulunamadı.")
+        raise HTTPException(404, "Report not found.")
     data["report_id"] = report_id
     return data
 
@@ -388,10 +388,10 @@ async def library_remove(item_id: int, user: dict = Depends(current_user)) -> di
 @app.post("/api/export/{fmt}")
 async def export(fmt: str, body: ExportIn, user: dict = Depends(current_user)) -> Any:
     if body.report_id is None:
-        raise HTTPException(400, "Dışa aktarılacak rapor belirtilmedi.")
+        raise HTTPException(400, "No report specified to export.")
     result = store.get_report(body.report_id, user["id"])
     if not result:
-        raise HTTPException(404, "Rapor bulunamadı.")
+        raise HTTPException(404, "Report not found.")
     articles = result.get("articles", [])
 
     binary = {
@@ -413,7 +413,7 @@ async def export(fmt: str, body: ExportIn, user: dict = Depends(current_user)) -
         "csv": ("﻿" + exporters.to_csv(articles), "text/csv", "csv"),
     }
     if fmt not in mapping:
-        raise HTTPException(400, "Bilinmeyen dışa aktarma biçimi.")
+        raise HTTPException(400, "Unknown export format.")
     body_text, media, ext = mapping[fmt]
     return PlainTextResponse(
         body_text, media_type=f"{media}; charset=utf-8",
@@ -445,7 +445,7 @@ async def admin_users(_: dict = Depends(require_admin), limit: int = 200) -> lis
 @app.post("/api/admin/grant")
 async def admin_grant(body: GrantIn, _: dict = Depends(require_admin)) -> dict:
     if accounts.by_id(body.user_id) is None:
-        raise HTTPException(404, "Kullanıcı bulunamadı.")
+        raise HTTPException(404, "User not found.")
     accounts.grant(body.user_id, body.amount, body.reason)
     return {"ok": True, "credits_left": accounts.balance(accounts.by_id(body.user_id))}
 

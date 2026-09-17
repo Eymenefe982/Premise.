@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="tr" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premise — E-posta doğrulama</title>
+<title>Premise — Email verification</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/auth.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
@@ -13,15 +13,15 @@
 <div class="auth-wrap">
   <div class="auth-card">
     <h1 class="auth-brand">Premise<span>.</span></h1>
-    <p class="auth-tag">E-posta doğrulama</p>
+    <p class="auth-tag">Email verification</p>
 
-    <div class="msg info" id="state">Doğrulanıyor…</div>
-    <p class="alt-link"><a href="/">Premise'e dön</a></p>
+    <div class="msg info" id="state">Verifying…</div>
+    <p class="alt-link"><a href="/">Back to Premise</a></p>
     <p class="foot">
-      Premise bir literatür tarama ve özetleme aracıdır. <b>Klinik karar desteği sağlamaz</b>,
-      tanı koymaz, tedavi önermez.
+      Premise is a literature search and summarisation tool. <b>It is not clinical decision
+      support</b>, does not diagnose, and does not recommend treatment.
       <br><br>
-      <a href="/giris">Giriş sayfasına dön →</a>
+      <a href="/giris">Back to sign in →</a>
     </p>
   </div>
 </div>
@@ -33,7 +33,7 @@
 
   function set(cls, text){ box.className = 'msg ' + cls; box.textContent = text; }
 
-  if (!token) { set('err', 'Bağlantıda doğrulama kodu yok.'); return; }
+  if (!token) { set('err', 'No verification code in this link.'); return; }
 
   fetch('/api/auth/verify', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -41,13 +41,13 @@
   }).then(async (res) => {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      set('ok', 'E-posta adresiniz doğrulandı. Premise\'i kullanmaya başlayabilirsiniz.');
+      set('ok', 'Your email address has been verified. You can start using Premise.');
       setTimeout(() => (location.href = '/'), 2500);
     } else {
-      set('err', data.detail || 'Doğrulama bağlantısı geçersiz ya da süresi dolmuş. ' +
-                 'Hesap sayfanızdan yeni bir bağlantı isteyebilirsiniz.');
+      set('err', data.detail || 'This verification link is invalid or has expired. ' +
+                 'You can request a new one from your account page.');
     }
-  }).catch(() => set('err', 'Sunucuya ulaşılamadı.'));
+  }).catch(() => set('err', 'Could not reach the server.'));
 })();
 </script>
 </body>

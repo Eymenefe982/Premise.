@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="tr" data-theme="light">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premise — Hesabım</title>
+<title>Premise — My account</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
 <style>
@@ -75,92 +75,92 @@
   <div class="bar">
     <div class="logo">Premise<span>.</span></div>
     <div>
-      <a href="/">← Aramaya dön</a>
+      <a href="/">← Back to search</a>
       &nbsp;·&nbsp;
-      <a href="#" id="logout">Çıkış yap</a>
+      <a href="#" id="logout">Sign out</a>
     </div>
   </div>
 
-  <!-- kayıt sonrası ilk adım -->
+  <!-- first step after signup -->
   <div class="card" id="welcome" hidden>
-    <h2>Hoş geldiniz</h2>
-    <p class="sub">Başlamadan önce tek bir adım kaldı: kendi NCBI arama anahtarınız.</p>
+    <h2>Welcome</h2>
+    <p class="sub">One step left before you start: your own NCBI search key.</p>
   </div>
 
-  <!-- geçici şifreyle giren kullanıcı -->
+  <!-- user signed in with a temporary password -->
   <div class="card" id="force-pw" hidden>
-    <h2>Şifrenizi değiştirin</h2>
-    <p class="sub">Geçici bir şifreyle giriş yaptınız. Devam etmeden önce aşağıdan
-      kalıcı bir şifre belirleyin.</p>
+    <h2>Change your password</h2>
+    <p class="sub">You signed in with a temporary password. Set a permanent one below
+      before continuing.</p>
   </div>
 
-  <!-- e-posta doğrulanmamış -->
+  <!-- email not verified -->
   <div class="card" id="verify-email" hidden>
-    <h2>E-posta adresinizi doğrulayın</h2>
-    <p class="sub">Arama yapabilmek için e-posta adresinize gönderdiğimiz bağlantıya
-      tıklamanız gerekiyor. Gelmediyse gereksiz/spam klasörünü kontrol edin.</p>
+    <h2>Verify your email address</h2>
+    <p class="sub">To search, you need to click the link we sent to your email address.
+      Didn't get it? Check your spam/junk folder.</p>
     <div class="inline">
-      <button class="btn" id="resend-verify">Doğrulama mailini yeniden gönder</button>
+      <button class="btn" id="resend-verify">Resend verification email</button>
     </div>
     <div class="flag" id="verify-msg" hidden></div>
   </div>
 
-  <!-- NCBI anahtarı -->
+  <!-- NCBI key -->
   <div class="card">
-    <h2>NCBI arama anahtarı <span class="pill" id="key-state">yok</span></h2>
+    <h2>NCBI search key <span class="pill" id="key-state">none</span></h2>
     <p class="sub">
-      NCBI, her kullanıcının kendi anahtarını kullanmasını ister. Anahtar <b>ücretsizdir</b>,
-      iki dakikada alınır ve PubMed hız sınırınızı saniyede 3 istekten 10 isteğe çıkarır.
-      Anahtarınız şifrelenerek saklanır.
+      NCBI asks every user to use their own key. The key is <b>free</b>, takes two minutes
+      to get, and raises your PubMed rate limit from 3 requests/second to 10. Your key is
+      stored encrypted.
     </p>
     <ol class="steps">
-      <li><a href="https://account.ncbi.nlm.nih.gov/settings/" target="_blank" rel="noopener">account.ncbi.nlm.nih.gov/settings</a> adresini açın</li>
-      <li>NCBI hesabı oluşturun veya Google hesabınızla giriş yapın</li>
-      <li>Sayfada <b>API Key Management</b> bölümüne inin</li>
-      <li><b>Create an API Key</b> düğmesine basın</li>
-      <li>Üretilen anahtarı kopyalayıp aşağıya yapıştırın</li>
+      <li>Open <a href="https://account.ncbi.nlm.nih.gov/settings/" target="_blank" rel="noopener">account.ncbi.nlm.nih.gov/settings</a></li>
+      <li>Create an NCBI account or sign in with your Google account</li>
+      <li>Scroll to the <b>API Key Management</b> section on the page</li>
+      <li>Click <b>Create an API Key</b></li>
+      <li>Copy the generated key and paste it below</li>
     </ol>
     <div class="inline">
-      <input type="text" id="ncbi" placeholder="Örn. a1b2c3d4e5f6..." autocomplete="off" spellcheck="false">
-      <button class="btn" id="save-key">Kaydet</button>
-      <button class="btn ghost" id="skip-key">Şimdi değil</button>
+      <input type="text" id="ncbi" placeholder="e.g. a1b2c3d4e5f6..." autocomplete="off" spellcheck="false">
+      <button class="btn" id="save-key">Save</button>
+      <button class="btn ghost" id="skip-key">Not now</button>
     </div>
     <div class="flag ok" id="key-msg" hidden></div>
   </div>
 
-  <!-- krediler -->
+  <!-- credits -->
   <div class="card">
-    <h2>Krediler</h2>
-    <p class="sub" id="plan-line">Yükleniyor…</p>
+    <h2>Credits</h2>
+    <p class="sub" id="plan-line">Loading…</p>
     <div class="credits">
       <b id="credits-left">—</b>
       <small id="credits-total"></small>
     </div>
     <div class="meter"><i id="credits-bar" style="width:0"></i></div>
     <div class="rows" style="margin-top:14px">
-      <div class="row"><span class="k">Bir arama kaç kredi?</span>
-        <span class="v">5 + makale sayısı + 3 × tam metin + 5 (sentez)</span></div>
-      <div class="row"><span class="k">Önbellekten gelen sonuç</span><span class="v">ücretsiz</span></div>
-      <div class="row"><span class="k">İptal edilen arama</span><span class="v">ücretsiz</span></div>
-      <div class="row"><span class="k">Dönem başlangıcı</span><span class="v" id="period">—</span></div>
+      <div class="row"><span class="k">How many credits per search?</span>
+        <span class="v">5 + article count + 3 × full text + 5 (synthesis)</span></div>
+      <div class="row"><span class="k">Cached result</span><span class="v">free</span></div>
+      <div class="row"><span class="k">Cancelled search</span><span class="v">free</span></div>
+      <div class="row"><span class="k">Period start</span><span class="v" id="period">—</span></div>
     </div>
   </div>
 
-  <!-- kredi hareketleri -->
+  <!-- credit ledger -->
   <div class="card">
-    <h2>Kredi hareketleri</h2>
-    <p class="sub">Son 50 işlem.</p>
-    <div class="rows ledger" id="ledger"><div class="row"><span class="k">Yükleniyor…</span></div></div>
+    <h2>Credit history</h2>
+    <p class="sub">Last 50 transactions.</p>
+    <div class="rows ledger" id="ledger"><div class="row"><span class="k">Loading…</span></div></div>
   </div>
 
-  <!-- şifre -->
+  <!-- password -->
   <div class="card">
-    <h2>Şifre değiştir</h2>
-    <p class="sub">En az 8 karakter olmalı.</p>
+    <h2>Change password</h2>
+    <p class="sub">Must be at least 8 characters.</p>
     <div class="inline">
-      <input type="password" id="pw-old" placeholder="Mevcut şifre" autocomplete="current-password">
-      <input type="password" id="pw-new" placeholder="Yeni şifre" autocomplete="new-password" minlength="8">
-      <button class="btn" id="save-pw">Güncelle</button>
+      <input type="password" id="pw-old" placeholder="Current password" autocomplete="current-password">
+      <input type="password" id="pw-new" placeholder="New password" autocomplete="new-password" minlength="8">
+      <button class="btn" id="save-pw">Update</button>
     </div>
     <div class="flag" id="pw-msg" hidden></div>
   </div>
@@ -183,10 +183,10 @@
     if (!res.ok) return location.replace('/giris');
     const me = await res.json();
 
-    $('key-state').textContent = me.has_ncbi_key ? 'kayıtlı' : 'yok';
+    $('key-state').textContent = me.has_ncbi_key ? 'on file' : 'none';
     $('plan-line').textContent = me.is_admin
-      ? 'Yönetici hesabı — tüm özellikler sınırsız.'
-      : `${me.plan_label} planı · tam metin okuma ${me.fulltext_allowed ? 'açık' : 'kapalı'}`;
+      ? 'Administrator account — all features unlimited.'
+      : `${me.plan_label} plan · full-text reading ${me.fulltext_allowed ? 'on' : 'off'}`;
     $('period').textContent = (me.period_start || '').slice(0, 10);
 
     if (me.must_change_password){
@@ -200,11 +200,11 @@
 
     if (me.is_admin){
       $('credits-left').textContent = '∞';
-      $('credits-total').textContent = 'sınırsız';
+      $('credits-total').textContent = 'unlimited';
       $('credits-bar').style.width = '100%';
     } else {
       $('credits-left').textContent = me.credits_left;
-      $('credits-total').textContent = `/ ${me.credits_total} kredi kaldı`;
+      $('credits-total').textContent = `/ ${me.credits_total} credits left`;
       const pct = me.credits_total ? (me.credits_left / me.credits_total) * 100 : 0;
       $('credits-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
     }
@@ -216,7 +216,7 @@
     const rows = await res.json();
     const box = $('ledger');
     if (!rows.length){
-      box.innerHTML = '<div class="row"><span class="k">Henüz hareket yok.</span></div>';
+      box.innerHTML = '<div class="row"><span class="k">No activity yet.</span></div>';
       return;
     }
     box.innerHTML = rows.map(r => `
@@ -233,13 +233,13 @@
       body: JSON.stringify({ api_key: $('ncbi').value.trim() }),
     });
     if (res.ok){
-      flag($('key-msg'), 'Anahtar kaydedildi.', true);
+      flag($('key-msg'), 'Key saved.', true);
       $('ncbi').value = '';
       load();
       if (first) setTimeout(() => location.replace('/'), 900);
     } else {
       const d = await res.json().catch(() => ({}));
-      flag($('key-msg'), typeof d.detail === 'string' ? d.detail : 'Anahtar kaydedilemedi.', false);
+      flag($('key-msg'), typeof d.detail === 'string' ? d.detail : 'Could not save the key.', false);
     }
   });
 
@@ -249,17 +249,17 @@
     const res = await fetch('/api/auth/resend-verification', { method: 'POST' });
     const d = await res.json().catch(() => ({}));
     if (res.ok){
-      flag($('verify-msg'), d.already_verified ? 'E-postanız zaten doğrulanmış.'
-           : 'Doğrulama maili gönderildi, gelen kutunuzu kontrol edin.', true);
+      flag($('verify-msg'), d.already_verified ? 'Your email is already verified.'
+           : 'Verification email sent, check your inbox.', true);
     } else {
-      flag($('verify-msg'), typeof d.detail === 'string' ? d.detail : 'Gönderilemedi.', false);
+      flag($('verify-msg'), typeof d.detail === 'string' ? d.detail : 'Could not send the email.', false);
     }
     btn.disabled = false;
   });
 
   $('skip-key').addEventListener('click', () => {
     if (first) location.replace('/');
-    else flag($('key-msg'), 'Anahtarsız da çalışır, yalnızca tarama biraz yavaşlar.', true);
+    else flag($('key-msg'), 'Works without a key too, searches will just be a bit slower.', true);
   });
 
   $('save-pw').addEventListener('click', async () => {
@@ -273,12 +273,12 @@
     });
     const d = await res.json().catch(() => ({}));
     if (res.ok){
-      flag($('pw-msg'), 'Şifreniz güncellendi.', true);
+      flag($('pw-msg'), 'Your password has been updated.', true);
       $('pw-old').value = $('pw-new').value = '';
     } else {
       flag($('pw-msg'), typeof d.detail === 'string' ? d.detail
-           : Array.isArray(d.detail) ? (d.detail[0]?.msg || 'Şifre güncellenemedi.')
-           : 'Şifre güncellenemedi.', false);
+           : Array.isArray(d.detail) ? (d.detail[0]?.msg || 'Could not update the password.')
+           : 'Could not update the password.', false);
     }
   });
 

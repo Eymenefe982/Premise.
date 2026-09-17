@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premise — Nasıl çalışır</title>
+<title>Premise — How it works</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🔬</text></svg>">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -161,120 +161,120 @@
 
     <section class="scene on">
       <div class="brandmark">Premise<span class="dot">.</span></div>
-      <p class="brandline">Her cümlenin altında kaynağı, her sayının arkasında metni.</p>
-      <p class="lede">PubMed, PubMed Central ve Europe PMC'yi aynı anda tarayan bir <b>literatür tarama ve özetleme aracı</b>. Klinik sorunuzu kendi dilinizde yazarsınız; Premise onu akademik arama diline çevirir, ücretsiz tam metinleri okur ve her iddiasının kaynağını gösteren bir rapor üretir.</p>
-      <span class="stamp">Tanı koymaz, tedavi önermez</span>
+      <p class="brandline">A source under every sentence, the text behind every number.</p>
+      <p class="lede">A <b>literature search and summarisation tool</b> that searches PubMed, PubMed Central and Europe PMC at once. You ask your clinical question in your own words; Premise turns it into academic search terms, reads the free full texts, and produces a report that cites a source for every claim.</p>
+      <span class="stamp">Does not diagnose, does not recommend treatment</span>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">01 · Soru</div>
-      <h2>Kendi dilinizde sorun,<br>akademik sorguya çevrilsin</h2>
+      <div class="eyebrow">01 · Question</div>
+      <h2>Ask in your own words,<br>we translate it to an academic query</h2>
       <div class="xform">
         <div class="xrow">
-          <div class="xlabel">Sizin sorunuz</div>
-          <div class="xval">Yaşlı atriyal fibrilasyon hastalarında DOAK'lar varfarinden daha güvenli mi?</div>
+          <div class="xlabel">Your question</div>
+          <div class="xval">Are DOACs safer than warfarin in elderly patients with atrial fibrillation?</div>
         </div>
         <div class="xarrow">↓</div>
         <div class="xrow">
-          <div class="xlabel">PubMed sorgusu — MeSH terimleriyle</div>
+          <div class="xlabel">PubMed query — with MeSH terms</div>
           <div class="xval code">("Atrial Fibrillation"[Mesh] AND "Anticoagulants"[Mesh] AND "Aged"[Mesh])</div>
         </div>
       </div>
-      <p class="lede">Rapor dilini siz seçersiniz: Türkçe, English, Deutsch, Français, Español.</p>
+      <p class="lede">You choose the report language: English, Türkçe, Deutsch, Français, Español.</p>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">02 · Tarama</div>
-      <h2>Üç sorgu varyantı,<br>beş kaynak, tek seferde</h2>
+      <div class="eyebrow">02 · Search</div>
+      <h2>Three query variants,<br>five sources, in one pass</h2>
       <div class="chips">
         <span class="chip lit">PubMed</span>
         <span class="chip lit">PubMed Central</span>
         <span class="chip lit">Europe PMC</span>
-        <span class="chip">OpenAlex · atıf sayısı</span>
-        <span class="chip">Unpaywall · ücretsiz PDF</span>
+        <span class="chip">OpenAlex · citation count</span>
+        <span class="chip">Unpaywall · free PDF</span>
         <span class="chip">StatPearls</span>
         <span class="chip">Cochrane</span>
-        <span class="chip">Kılavuzlar</span>
+        <span class="chip">Guidelines</span>
       </div>
-      <p class="lede">Aynı makalenin DOI, PMID ve PMCID üzerinden gelen kopyaları tek kayıtta birleştirilir. Sonuçlar <b>güncellik, kanıt düzeyi, atıf sayısı ve erişilebilirliğe</b> göre sıralanır. Özeti olmayan kayıtlar elenir.</p>
+      <p class="lede">Duplicate copies of the same article arriving via DOI, PMID and PMCID are merged into a single record. Results are ranked by <b>recency, level of evidence, citation count and accessibility</b>. Records with no abstract are dropped.</p>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">03 · Tam metin</div>
-      <h2>Özete değil,<br>makalenin tamamına dayanır</h2>
-      <p class="lede">En nitelikli makalelerin PubMed Central'daki <b>açık erişim tam metni</b> indirilir, bölümlerine ayrılır ve sentez bunun üzerine kurulur. Çoğu aracın yalnızca özeti okuduğu yerde Premise bulgular bölümünü de okur.</p>
+      <div class="eyebrow">03 · Full text</div>
+      <h2>Built on the whole article,<br>not just the abstract</h2>
+      <p class="lede">The <b>open-access full text</b> of the highest-quality articles is downloaded from PubMed Central, split into sections, and the synthesis is built on top of it. Where most tools only read the abstract, Premise reads the results section too.</p>
       <div class="chips">
-        <span class="chip">Kısa Yanıt</span>
-        <span class="chip">Kanıt Özeti</span>
-        <span class="chip">Tartışmalı ve Eksik Olanlar</span>
+        <span class="chip">Short Answer</span>
+        <span class="chip">Evidence Summary</span>
+        <span class="chip">Disputed and Missing</span>
       </div>
-      <p class="lede">Raporun her olgusal cümlesi <span class="cite">[PMID: 29127180]</span> biçiminde kaynağını taşır. Sonuç kümesinde bulunmayan bir PMID geçerse, rapor onu <b>doğrulanmamış</b> olarak işaretler.</p>
+      <p class="lede">Every factual sentence in the report carries its source as <span class="cite">[PMID: 29127180]</span>. If a PMID appears that isn't in the result set, the report flags it as <b>unverified</b>.</p>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">04 · Doğrulama</div>
-      <h2>Bir sayı kaynak metinde yoksa,<br>rapora da girmez</h2>
-      <p class="lede">Her makaleden etki büyüklüğü, güven aralığı, denek sayısı ve p değeri çıkarılır — sonra her biri <b>kaynak metinde birebir aranır</b>. Bulunamayan bulgu sessizce elenir.</p>
+      <div class="eyebrow">04 · Verification</div>
+      <h2>If a figure isn't in the source text,<br>it doesn't enter the report either</h2>
+      <p class="lede">Effect size, confidence interval, sample size and p value are extracted from each article — then each one is <b>searched for verbatim in the source text</b>. A finding that can't be found is quietly dropped.</p>
       <div class="tblwrap">
         <table>
-          <thead><tr><th>Sonlanım</th><th>Ölçüt</th><th>%95 GA</th><th>Durum</th></tr></thead>
+          <thead><tr><th>Outcome</th><th>Measure</th><th>95% CI</th><th>Status</th></tr></thead>
           <tbody>
-            <tr class="kept"><td>kardiyovasküler ölüm</td><td class="mono">HR 0,86</td><td class="mono">0,79 – 0,93</td><td class="tag y">✓ metinde bulundu</td></tr>
-            <tr class="kept"><td>kalp yetmezliği yatışı</td><td class="mono">HR 0,71</td><td class="mono">0,67 – 0,77</td><td class="tag y">✓ metinde bulundu</td></tr>
-            <tr class="dropped"><td>böbrek sonlanımı</td><td class="mono">HR 0,64</td><td class="mono">0,51 – 0,80</td><td class="tag n">✕ elendi</td></tr>
+            <tr class="kept"><td>cardiovascular death</td><td class="mono">HR 0.86</td><td class="mono">0.79 – 0.93</td><td class="tag y">✓ found in text</td></tr>
+            <tr class="kept"><td>heart failure hospitalisation</td><td class="mono">HR 0.71</td><td class="mono">0.67 – 0.77</td><td class="tag y">✓ found in text</td></tr>
+            <tr class="dropped"><td>renal outcome</td><td class="mono">HR 0.64</td><td class="mono">0.51 – 0.80</td><td class="tag n">✕ dropped</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="lede">Ayrıca işaret hataları düzeltilir — <span class="mono">MD 136,03</span> ile <span class="mono">MD −136,03</span> zıt sonuçlardır. Oran ölçütlerinde negatif güven aralığı sınırı kabul edilmez, ters sıralanmış sınırlar düzeltilir.</p>
+      <p class="lede">Sign errors are corrected too — <span class="mono">MD 136.03</span> and <span class="mono">MD −136.03</span> are opposite results. For ratio measures a negative confidence-interval bound is rejected, and reversed bounds are corrected.</p>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">05 · Kaynağı gör</div>
-      <h2>Her cümlenin dayandığı<br>paragrafı açıp okuyun</h2>
-      <div class="claim">SGLT2 inhibitörleri kalp yetmezliği yatışlarını anlamlı biçimde azaltmıştır <span class="cite">[PMID: 32865377]</span>.</div>
+      <div class="eyebrow">05 · See the source</div>
+      <h2>Open the paragraph<br>behind every sentence</h2>
+      <div class="claim">SGLT2 inhibitors significantly reduced heart failure hospitalisations <span class="cite">[PMID: 32865377]</span>.</div>
       <div class="passage">…hospitalization for heart failure occurred in <mark>9.1%</mark> of patients in the treatment group versus <mark>12.4%</mark> in the placebo group <mark>(HR 0.71; 95% CI, 0.67 to 0.77)</mark>…</div>
-      <p class="lede">Eşleştirme tamamen tarayıcıda çalışır, ek model çağrısı yapılmaz. Ortak sayılar dört kat ağırlıklıdır; bir etki büyüklüğü neredeyse benzersizdir. Hiçbir paragraf yeterince eşleşmezse panel bunu <b>dürüstçe söyler</b>, uydurma bir kaynak göstermez.</p>
+      <p class="lede">Matching runs entirely in the browser, no extra model call is made. Shared numbers are weighted four times as heavily; an effect size is nearly unique. If no paragraph matches closely enough, the panel <b>says so honestly</b> instead of making up a source.</p>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">06 · Sınırlar</div>
-      <h2>Premise'in yapmadıkları</h2>
-      <p class="lede">Bir aracın ne yapamadığını bilmeden ona güvenilmez. Bunlar gizlenmiyor:</p>
+      <div class="eyebrow">06 · Limits</div>
+      <h2>What Premise doesn't do</h2>
+      <p class="lede">You can't trust a tool without knowing what it can't do. Nothing here is hidden:</p>
       <div class="limits">
-        <div class="limit"><span class="x">✕</span><div><b>Klinik karar desteği sağlamaz.</b> Üretilen sentez, kaynak makalelerle doğrulanmadan klinik kararda kullanılmamalıdır.</div></div>
-        <div class="limit"><span class="x">✕</span><div><b>Tam metin yalnızca açık erişimde.</b> Okuma, PubMed Central açık erişim koleksiyonuyla sınırlıdır.</div></div>
-        <div class="limit"><span class="x">✕</span><div><b>Abonelikli içerik indirilmez.</b> UpToDate ve paywall'lı dergiler kopyalanmaz; yalnızca kendi kurumsal erişiminizle açabileceğiniz bağlantı üretilir.</div></div>
-        <div class="limit"><span class="x">✕</span><div><b>Özetsiz kayıtlar değerlendirilmez.</b> Yalnızca özeti bulunan makaleler dikkate alınır.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Not clinical decision support.</b> The generated synthesis must not be used in a clinical decision without verifying it against the source articles.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Full text only where open access.</b> Reading is limited to the PubMed Central open-access collection.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Subscription content is never downloaded.</b> UpToDate and paywalled journals are not copied; only a link you can open with your own institutional access is generated.</div></div>
+        <div class="limit"><span class="x">✕</span><div><b>Records without an abstract aren't considered.</b> Only articles that have an abstract are taken into account.</div></div>
       </div>
     </section>
 
     <section class="scene">
-      <div class="eyebrow">07 · Çıktı</div>
-      <h2>Raporu çalıştığınız<br>araca taşıyın</h2>
+      <div class="eyebrow">07 · Output</div>
+      <h2>Take the report<br>into the tool you already use</h2>
       <div class="fmts">
         <span class="fmt">PDF</span><span class="fmt">Word</span><span class="fmt">Markdown</span>
         <span class="fmt">RIS</span><span class="fmt">BibTeX</span><span class="fmt">CSV</span>
       </div>
-      <p class="lede">RIS dosyası <b>Zotero, Mendeley ve EndNote</b>'a doğrudan aktarılır. PDF çıktısı sayısal bulgu tablolarını ve tıklanabilir PMID / DOI bağlantılarını korur.</p>
-      <p class="lede">Aynı soru aynı ayarlarla tekrar sorulduğunda saklanan sonuç döner — <b>ücretsiz ve anında</b>. Sonuç her zaman "daha önceki bir aramadan" etiketiyle işaretlenir, yanındaki düğme taramayı baştan çalıştırır.</p>
-      <a class="cta" href="/giris">Hesap oluştur</a>
+      <p class="lede">The RIS file imports directly into <b>Zotero, Mendeley and EndNote</b>. The PDF output keeps the numeric findings tables and clickable PMID / DOI links.</p>
+      <p class="lede">Asking the same question with the same settings again returns the stored result — <b>free and instant</b>. The result is always labelled as reused from an earlier search, with a button next to it to run the search fresh.</p>
+      <a class="cta" href="/giris">Create account</a>
     </section>
 
   </div>
 
   <div class="bar">
-    <button class="ibtn" id="play" aria-label="Duraklat veya oynat" title="Duraklat / oynat">
+    <button class="ibtn" id="play" aria-label="Pause or play" title="Pause / play">
       <svg id="playicon" viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z"/></svg>
     </button>
-    <button class="ibtn" id="prev" aria-label="Önceki" title="Önceki">
+    <button class="ibtn" id="prev" aria-label="Previous" title="Previous">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5 8 12l7 7"/></svg>
     </button>
-    <button class="ibtn" id="next" aria-label="Sonraki" title="Sonraki">
+    <button class="ibtn" id="next" aria-label="Next" title="Next">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5 7 7-7 7"/></svg>
     </button>
     <span class="counter" id="counter">1 / 8</span>
     <span class="spacer"></span>
-    <a class="skip" href="/giris">Tanıtımı geç →</a>
+    <a class="skip" href="/giris">Skip intro →</a>
   </div>
 </div>
 

@@ -98,8 +98,8 @@ async function runSearch(options = {}) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const detail = typeof data.detail === "string" ? data.detail
-        : Array.isArray(data.detail) ? (data.detail[0]?.msg || "Sunucu hatası")
-        : "Sunucu hatası";
+        : Array.isArray(data.detail) ? (data.detail[0]?.msg || "Server error")
+        : "Server error";
       throw new Error(detail);
     }
     const { job_id } = await res.json();
@@ -435,14 +435,14 @@ function statBadges(a) {
     a.citations ? `<span class="badge">${a.citations} citations</span>` : "",
     a.is_oa || a.pmcid ? '<span class="badge badge-oa">Free full text</span>' : "",
     a.fulltext_used
-      ? '<span class="badge badge-ft" title="Sentez bu makalenin tam metnine dayanıyor">Full text read</span>'
-      : '<span class="badge badge-abs" title="Bu makaleden yalnızca özet okundu; özetler sonucu olduğundan güçlü gösterebilir">Abstract only</span>',
+      ? '<span class="badge badge-ft" title="The synthesis draws on this article\'s full text">Full text read</span>'
+      : '<span class="badge badge-abs" title="Only the abstract was read from this article; abstracts can overstate the result">Abstract only</span>',
     a.filter_status === "mismatch"
-      ? '<span class="badge badge-off" title="Bu kayıt seçtiğiniz yayın türü filtresine uymuyor">Filtre dışı</span>' : "",
+      ? '<span class="badge badge-off" title="This record does not match your chosen publication-type filter">Off filter</span>' : "",
     a.filter_status === "unknown"
-      ? '<span class="badge badge-unk" title="Kaydın yayın türü bilgisi boş, filtreye uyup uymadığı doğrulanamadı">Türü belirsiz</span>' : "",
+      ? '<span class="badge badge-unk" title="This record has no publication-type data, so filter compliance could not be checked">Type unclear</span>' : "",
     a.relevance === 1
-      ? '<span class="badge badge-rel" title="Konuyla ilgili, ama sorunuzu doğrudan araştırmıyor">Dolaylı</span>' : "",
+      ? '<span class="badge badge-rel" title="Related to the topic, but does not directly investigate your question">Indirect</span>' : "",
   ].filter(Boolean).join("");
 }
 
@@ -480,8 +480,8 @@ function renderBibliography() {
       Effect sizes, confidence intervals and p values were extracted from ${withStats} of these
       articles. Every number is copied verbatim from the source text and verified against it,
       never calculated. Click a PMID to open the article.
-      ${dropped ? `<b>${dropped} sayı kaynak metinde birebir bulunamadığı için elendi
-        ve rapora hiç girmedi.</b>` : ""}
+      ${dropped ? `<b>${dropped} figure(s) could not be found verbatim in the source text
+        and were dropped, never entering the report.</b>` : ""}
     </p>
     <ol class="bib-list">
       ${items.map((a) => `
@@ -518,29 +518,29 @@ function renderEvidenceNotice(result) {
 
   const lines = [];
   if (result.answer_mode === "limited") {
-    lines.push(`<b>Sınırlı cevap.</b> Sorunuzu doğrudan araştıran
-      ${result.relevant_count} makale bulundu; bu, bir öneriye temel olacak kadar değil.
-      Bu yüzden rapor klinik çıkarım bölümü içermiyor, çalışmaları tek tek aktarıyor.`);
+    lines.push(`<b>Limited answer.</b> Only ${result.relevant_count} article(s) directly
+      investigate your question — not enough to build a recommendation on. The report
+      therefore skips clinical inference and reports the studies one by one instead.`);
   }
   if (result.low_evidence) {
-    lines.push(`<b>Bu yanıt yalnızca ${n} makaleye dayanıyor.</b> Soruyu kesin olarak
-      yanıtlamak için bu sayı düşük; sonucu tek başına klinik karara temel almayın.`);
+    lines.push(`<b>This answer rests on only ${n} article(s).</b> That is too few to answer
+      the question with confidence; do not base a clinical decision on it alone.`);
   }
   if (result.broadened) {
-    const what = { "date range": "tarih aralığı",
-                   "publication type filters": "yayın türü filtreleri" };
-    const names = (result.relaxed || []).map((r) => what[r] || r).join(" ve ");
-    lines.push(`İlk taramada yeterli sonuç çıkmadığı için ${names} sınırı kaldırılarak
-      tekrar arandı, bu yüzden listede seçtiğiniz ölçütlerin dışında kalan makaleler olabilir.`);
+    const what = { "date range": "date range",
+                   "publication type filters": "publication-type filters" };
+    const names = (result.relaxed || []).map((r) => what[r] || r).join(" and ");
+    lines.push(`The initial search did not return enough results, so it was rerun with the
+      ${names} limit removed — the list may include articles outside your original criteria.`);
   }
   if (off) {
-    lines.push(`Listedeki ${off} makale seçtiğiniz yayın türü filtresine uymuyor ve
-      <b>Filtre dışı</b> etiketiyle işaretlendi. Sıralamada geri çekildiler, ama silinmediler:
-      yayın türü bilgisi eksik gelen kayıtları haksız yere kaybetmemek için.`);
+    lines.push(`${off} article(s) in the list do not match your chosen publication-type filter
+      and are marked <b>Off filter</b>. They were pushed down in ranking, not removed — so
+      records with missing publication-type data are not unfairly discarded.`);
   }
   if (result.low_evidence) {
-    lines.push(`Daha geniş sonuç için: sorunuzu daha genel yazın, tarih aralığını
-      genişletin veya yayın türü filtrelerini kaldırın.`);
+    lines.push(`For a broader result: phrase your question more generally, widen the date
+      range, or remove the publication-type filters.`);
   }
 
   box.innerHTML = lines.map((l) => `<p>${l}</p>`).join("");
@@ -551,14 +551,15 @@ function renderEvidenceNotice(result) {
 function noAnswerHtml(result) {
   const tips = (result.suggestions || []).map((t) => `<li>${esc(t)}</li>`).join("");
   return `<div class="no-answer">
-    <h3>Bu soruyu doğrudan yanıtlayan makale bulunamadı</h3>
-    <p>Tarama ${result.pool_size} kayıt getirdi, ancak hiçbiri sorunuzu doğrudan ele almıyor.
-       Birkaç alakasız makaleden kendinden emin bir cevap yazmak yerine durduk; böyle bir
-       cevap kaynaklı göründüğü için daha da yanıltıcı olurdu.
-       <b>Bu arama için kredi düşülmedi.</b></p>
-    ${tips ? `<p>Deneyebilecekleriniz:</p><ul>${tips}</ul>` : ""}
-    <p class="no-answer-foot">Tarama sonuçları <b>Articles</b> sekmesinde duruyor,
-       kendiniz inceleyebilirsiniz.</p>
+    <h3>No article was found that directly answers this question</h3>
+    <p>The search returned ${result.pool_size} record(s), but none of them address your
+       question directly. Rather than write a confident-sounding answer from a handful of
+       unrelated articles, we stopped — an answer like that would look sourced and be more
+       misleading because of it.
+       <b>No credit was charged for this search.</b></p>
+    ${tips ? `<p>Things you could try:</p><ul>${tips}</ul>` : ""}
+    <p class="no-answer-foot">The search results are still on the <b>Articles</b> tab,
+       you can review them yourself.</p>
   </div>`;
 }
 
@@ -568,16 +569,16 @@ function renderAgreement(result) {
   const groups = result.agreement || [];
   if (!groups.length) { box.innerHTML = ""; box.hidden = true; return; }
 
-  const word = { decrease: "azalma", increase: "artış", null: "anlamsız" };
+  const word = { decrease: "decrease", increase: "increase", null: "null" };
   box.innerHTML = `
-    <h3 class="bib-head">Çalışmalar ne yönde uyuşuyor</h3>
-    <p class="bib-note">Bu tablo sentezden bağımsızdır: her satır, makalelerden birebir
-      çıkarılan etki büyüklüğü ve güven aralığından hesaplanır. Güven aralığı etkisizlik
-      noktasını kesiyorsa sonuç "anlamsız" sayılır.</p>
+    <h3 class="bib-head">Where studies agree on direction</h3>
+    <p class="bib-note">This table is independent of the synthesis: each row is computed from
+      the effect size and confidence interval extracted verbatim from the articles. If the
+      confidence interval crosses the point of no effect, the result counts as "null".</p>
     ${groups.map((g) => {
       const parts = Object.entries(g.counts)
         .filter(([, v]) => v)
-        .map(([k, v]) => `${v} çalışma ${word[k]}`).join(" · ");
+        .map(([k, v]) => `${v} ${v === 1 ? "study" : "studies"} ${word[k]}`).join(" · ");
       const rows = g.entries.map((e) => `
         <tr>
           <td><a href="https://pubmed.ncbi.nlm.nih.gov/${e.pmid}/" target="_blank"
@@ -591,7 +592,7 @@ function renderAgreement(result) {
                 <div class="agree-head">
                   <b>${esc(g.outcome)}</b>
                   <span class="agree-counts">${parts}</span>
-                  ${g.conflicting ? '<span class="badge badge-off">çelişkili</span>' : ""}
+                  ${g.conflicting ? '<span class="badge badge-off">conflicting</span>' : ""}
                 </div>
                 <table class="findings"><tbody>${rows}</tbody></table>
               </div>`;
@@ -605,11 +606,12 @@ function renderClaimFlags(result) {
   const flags = result.flagged_claims || [];
   if (!flags.length) { box.innerHTML = ""; box.hidden = true; return; }
 
-  const label = { partial: "kaynağı aşıyor", unsupported: "kaynakta yok" };
+  const label = { partial: "overstates source", unsupported: "not in source" };
   box.innerHTML = `
-    <h4>Kısa Cevap'ta gözden geçirilmesi gereken ${flags.length} cümle</h4>
-    <p>Her cümle, atıf verdiği makalenin metnine karşı ayrıca sınandı. Aşağıdakiler
-       birebir doğrulanamadı; cümleyi açıp kaynağın ne dediğini kendiniz görün.</p>
+    <h4>${flags.length} sentence(s) in the summary worth a second look</h4>
+    <p>Each sentence was checked separately against the text of the article it cites.
+       The ones below could not be verified word-for-word; open the sentence and see
+       what the source actually says.</p>
     <ul>
       ${flags.map((f) => `<li>
          <span class="badge badge-off">${label[f.verdict] || f.verdict}</span>
@@ -941,29 +943,58 @@ async function loadAccount() {
 
   if (me.is_admin) {
     pill.className = "pill";
-    pill.textContent = "yönetici · sınırsız";
+    pill.textContent = "admin · unlimited";
   } else {
-    const low = me.credits_left <= 40;          // bir varsayılan aramanın altı
+    const low = me.credits_left <= 40;          // below a default search's typical cost
     pill.className = low ? "pill pill-warn" : "pill";
-    pill.textContent = `${me.credits_left} kredi`;
-    pill.title = `${me.plan_label} planı · ${me.credits_total} krediden ${me.credits_left} tanesi kaldı`;
+    pill.textContent = `${me.credits_left} credits`;
+    pill.title = `${me.plan_label} plan · ${me.credits_left} of ${me.credits_total} credits left`;
   }
 
-  // Ücretsiz katmanda tam metin okuma kapalı: anahtarı kilitle ve sebebini söyle.
+  // Full-text reading is off on the free tier: lock the toggle and say why.
   const ft = $("#use_fulltext");
   if (ft && !me.fulltext_allowed) {
     ft.checked = false;
     ft.disabled = true;
     const label = ft.closest(".switch");
-    if (label) label.title = "Tam metin okuma ücretli planlarda açıktır.";
+    if (label) label.title = "Full-text reading is available on paid plans.";
   }
   return me;
 }
+
+/* ------------------------------------------------------- verification gate */
+function applyVerificationGate(me) {
+  const blocked = !me.is_admin && !me.email_verified;
+  $("#verify-gate").hidden = !blocked;
+  $("#main").hidden = blocked;
+  return blocked;
+}
+
+$("#verify-resend").addEventListener("click", async () => {
+  const btn = $("#verify-resend");
+  btn.disabled = true;
+  const msg = $("#verify-gate-msg");
+  try {
+    const res = await fetch("/api/auth/resend-verification", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    msg.className = "flag " + (res.ok ? "ok" : "err");
+    msg.textContent = res.ok
+      ? (data.already_verified ? "Your email is already verified." : "Verification email sent, check your inbox.")
+      : (typeof data.detail === "string" ? data.detail : "Could not send the email.");
+    msg.hidden = false;
+  } catch {
+    msg.className = "flag err";
+    msg.textContent = "Could not reach the server.";
+    msg.hidden = false;
+  }
+  btn.disabled = false;
+});
 
 /* ----------------------------------------------------------------- start */
 (async function init() {
   const me = await loadAccount();
   if (!me) return;
+  if (applyVerificationGate(me)) return;
   loadHistory();
   loadLibrary();
 })();

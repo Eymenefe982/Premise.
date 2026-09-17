@@ -47,58 +47,59 @@ def _deliver(to: str, subject: str, body: str) -> None:
 
 
 def send(to: str, subject: str, body: str) -> None:
-    """E-postayı arka planda yollar. Yapılandırma yoksa konsola yazar."""
+    """Sends the email in the background. Logs to console if not configured."""
     if not configured():
-        print(f"\n[mail] Brevo yapılandırılmamış, e-posta gönderilmedi.\n"
-              f"       Alıcı : {to}\n       Konu  : {subject}\n"
-              f"       İçerik:\n{body}\n")
+        print(f"\n[mail] Brevo is not configured, email not sent.\n"
+              f"       To      : {to}\n       Subject : {subject}\n"
+              f"       Body:\n{body}\n")
         return
     threading.Thread(target=_deliver, args=(to, subject, body), daemon=True).start()
 
 
-# --------------------------------------------------------------------- şablonlar
+# --------------------------------------------------------------------- templates
 def send_welcome(to: str) -> None:
-    send(to, f"{APP_NAME}'e hoş geldiniz",
-         f"""Merhaba,
+    send(to, f"Welcome to {APP_NAME}",
+         f"""Hi,
 
-{APP_NAME} hesabınız oluşturuldu. Klinik sorularınız için PubMed, Europe PMC ve
-diğer tıbbi kaynakları tek seferde tarayıp kanıta dayalı bir özet çıkarabilirsiniz.
+Your {APP_NAME} account has been created. For any clinical question, you can
+search PubMed, Europe PMC and other medical sources at once and get an
+evidence-based summary.
 
-Hemen bir arama yaparak başlayabilirsiniz: {APP_URL}
+Start a search right away: {APP_URL}
 
 {APP_NAME}""")
 
 
 def send_temp_password(to: str, temp_password: str) -> None:
-    send(to, f"{APP_NAME} geçici şifreniz",
-         f"""Merhaba,
+    send(to, f"Your {APP_NAME} temporary password",
+         f"""Hi,
 
-{APP_NAME} hesabınız için bir geçici şifre oluşturuldu:
+A temporary password was created for your {APP_NAME} account:
 
 {temp_password}
 
-Bu şifreyle giriş yapabilirsiniz. Diğer cihazlardaki oturumlarınız bu işlemle
-kapatıldı. Giriş yaptıktan sonra hesabınızdan ("Şifre değiştir" bölümü) kalıcı
-bir şifre belirlemenizi öneririz.
+You can sign in with it. Your sessions on other devices have been signed out.
+After signing in, we recommend setting a permanent password from your account
+page ("Change password" section).
 
-Bu isteği siz yapmadıysanız, birisi hesabınıza erişmeye çalışıyor olabilir:
-giriş yapıp şifrenizi hemen değiştirin.
+If you did not request this, someone may be trying to access your account:
+sign in and change your password right away.
 
 {APP_NAME}""")
 
 
 def send_email_verification(to: str, token: str, valid_hours: int) -> None:
     link = f"{APP_URL}/eposta-dogrula?token={token}"
-    send(to, f"{APP_NAME} e-posta adresinizi doğrulayın",
-         f"""Merhaba,
+    send(to, f"Verify your {APP_NAME} email address",
+         f"""Hi,
 
-{APP_NAME} hesabınızı oluşturdunuz. E-posta adresinizin size ait olduğunu
-doğrulamak için aşağıdaki bağlantıyı açın:
+You created a {APP_NAME} account. To confirm this email address is yours,
+open the link below:
 
 {link}
 
-Bağlantı {valid_hours} saat geçerlidir.
+The link is valid for {valid_hours} hours.
 
-Bu hesabı siz oluşturmadıysanız bu iletiyi yok sayabilirsiniz.
+If you did not create this account, you can ignore this message.
 
 {APP_NAME}""")

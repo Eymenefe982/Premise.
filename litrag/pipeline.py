@@ -254,8 +254,8 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
                 relaxed.append("publication type filters")
 
     if not articles:
-        raise ValueError("Bu ölçütlere uyan makale bulunamadı. "
-                         "Filtreleri gevşetip tekrar deneyin.")
+        raise ValueError("No article matched these criteria. "
+                         "Try relaxing the filters and search again.")
 
     # 3) Açık erişim ve atıf verisiyle zenginleştir
     checkpoint()

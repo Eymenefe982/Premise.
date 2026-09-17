@@ -102,8 +102,8 @@ CREDIT_SYNTHESIS = 5
 CREDIT_VERIFY = 2          # triyaj + iddia doğrulama (ek model çağrıları)
 
 PLANS = {
-    "free":    {"label": "Ücretsiz", "credits": 150,  "fulltext": False, "price_try": 0},
-    "asistan": {"label": "Asistan",  "credits": 1600, "fulltext": True,  "price_try": 349},
+    "free":    {"label": "Free",     "credits": 150,  "fulltext": False, "price_try": 0},
+    "asistan": {"label": "Assistant","credits": 1600, "fulltext": True,  "price_try": 349},
     "pro":     {"label": "Pro",      "credits": 2600, "fulltext": True,  "price_try": 499},
 }
 
