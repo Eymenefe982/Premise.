@@ -78,12 +78,12 @@ A temporary password was created for your {APP_NAME} account:
 
 {temp_password}
 
-You can sign in with it. Your sessions on other devices have been signed out.
-After signing in, we recommend setting a permanent password from your account
-page ("Change password" section).
+It works once and expires in 1 hour. Your current password keeps working until
+you sign in with this one; when you do, it replaces your old password and your
+sessions on other devices are signed out. After signing in, set a permanent
+password from your account page ("Change password" section).
 
-If you did not request this, someone may be trying to access your account:
-sign in and change your password right away.
+If you did not request this, you can ignore this email: nothing has changed.
 
 {APP_NAME}""")
 

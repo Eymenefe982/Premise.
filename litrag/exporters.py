@@ -243,6 +243,13 @@ def to_bibtex(articles: list[dict]) -> str:
 
 
 # ------------------------------------------------------------------------ CSV
+def _cell(value):
+    """Excel'de formül olarak çalışabilecek hücreleri (CSV enjeksiyonu) etkisizleştirir."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def to_csv(articles: list[dict]) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";", quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
@@ -250,10 +257,11 @@ def to_csv(articles: list[dict]) -> str:
                      "Population", "n", "Numeric findings", "Citations", "Open access",
                      "PMID", "DOI", "Link"])
     for a in articles:
-        writer.writerow([a.get("title", ""), a.get("authors", ""), a.get("journal", ""),
-                         a.get("year", ""), a.get("evidence_label", ""), a.get("design", ""),
-                         a.get("population", ""), a.get("sample_size") or "",
-                         format_findings(a), a.get("citations", 0),
-                         "Yes" if a.get("is_oa") else "No", a.get("pmid", ""),
-                         a.get("doi", ""), a.get("best_free_url", "")])
+        writer.writerow([_cell(v) for v in (
+            a.get("title", ""), a.get("authors", ""), a.get("journal", ""),
+            a.get("year", ""), a.get("evidence_label", ""), a.get("design", ""),
+            a.get("population", ""), a.get("sample_size") or "",
+            format_findings(a), a.get("citations", 0),
+            "Yes" if a.get("is_oa") else "No", a.get("pmid", ""),
+            a.get("doi", ""), a.get("best_free_url", ""))])
     return buffer.getvalue()

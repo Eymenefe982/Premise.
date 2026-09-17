@@ -96,6 +96,11 @@ html[data-theme="dark"] .sun { display: none; }
 }
 .pill-muted { background: var(--surface-2); color: var(--muted); }
 .pill-warn { background: var(--warn-soft); color: var(--warn); }
+.pill-love { background: #fde8ef; color: #c2185b; font-weight: 600; }
+:root[data-theme="dark"] .pill-love { background: #4a1d2e; color: #ff8fb8; }
+.love-heart { display: inline-block; color: #e91e63; animation: love-beat 1.4s ease-in-out infinite; }
+@keyframes love-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.25); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .love-heart { animation: none; } }
 
 /* --------------------------------------------------------- verify gate */
 .verify-gate { max-width: 560px; margin: 64px auto; padding: 0 24px; }

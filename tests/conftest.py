@@ -36,7 +36,8 @@ def _clean_throttles():
     """
     from litrag import security
     for throttle in (security.login_throttle, security.signup_throttle,
-                     security.search_throttle, security.reset_throttle):
+                     security.search_throttle, security.reset_throttle,
+                     security.login_failures):
         with throttle._lock:
             throttle._hits.clear()
     yield

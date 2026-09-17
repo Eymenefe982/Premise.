@@ -1,6 +1,7 @@
 """API girdi modelleri. Dışarıdan gelen her gövde önce buradan geçer."""
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 from email_validator import EmailNotValidError, validate_email
@@ -107,6 +108,21 @@ class SearchIn(BaseModel):
 class LibraryIn(BaseModel):
     article: dict = Field(default_factory=dict)
     tag: str = Field(default="", max_length=60)
+
+    @field_validator("article")
+    @classmethod
+    def bounded(cls, v: dict) -> dict:
+        # Veritabanına yalnız birkaç kısa alan yazılır; sınırsız gövde disk doldurur.
+        if len(json.dumps(v, default=str)) > 60_000:
+            raise ValueError("Article payload is too large.")
+        for field in ("pmid", "doi", "title", "authors", "journal", "best_free_url", "pubmed_url"):
+            if v.get(field) is not None and not isinstance(v[field], str):
+                raise ValueError(f"Invalid article field: {field}")
+        try:
+            int(v.get("year") or 0)
+        except (TypeError, ValueError):
+            raise ValueError("Invalid article field: year")
+        return v
 
 
 class ExportIn(BaseModel):

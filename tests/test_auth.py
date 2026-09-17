@@ -83,11 +83,16 @@ def test_forgot_does_not_reveal_whether_an_account_exists(client, outbox):
     assert len(outbox) == 1              # posta yalnızca kayıtlı adrese gider
 
 
-def test_forgot_revokes_existing_sessions(client, outbox):
+def test_forgot_does_not_lock_out_the_account(client, outbox):
+    """E-posta adresini bilen biri "şifremi unuttum" diyerek hesap sahibini dışarıda
+    bırakamamalı: mevcut şifre ve oturum geçici şifre kullanılana kadar geçerli kalır."""
     client.post("/api/auth/signup", json=SIGNUP)
-    assert client.get("/api/me").status_code == 200
     client.post("/api/auth/forgot", json={"email": SIGNUP["email"]})
-    assert client.get("/api/me").status_code == 401      # eski oturum düştü
+    assert client.get("/api/me").status_code == 200
+    fresh = TestClient(appmod.app)
+    assert fresh.post("/api/auth/login",
+                      json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+                      ).status_code == 200
 
 
 def test_temp_password_logs_in_and_flags_must_change(client, outbox):
@@ -97,19 +102,52 @@ def test_temp_password_logs_in_and_flags_must_change(client, outbox):
     temp_password = _temp_password_in(outbox[-1][2])
 
     fresh = TestClient(appmod.app)
-    # Eski şifre artık geçersiz
-    assert fresh.post("/api/auth/login",
-                      json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
-                      ).status_code == 401
-
     res = fresh.post("/api/auth/login",
                      json={"email": SIGNUP["email"], "password": temp_password})
     assert res.status_code == 200
     assert res.json()["must_change_password"] is True
+    # Geçici şifre kullanılınca eski şifre ve diğer oturumlar düşer; tekrar kullanılamaz
+    assert client.get("/api/me").status_code == 401
+    assert TestClient(appmod.app).post(
+        "/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+    ).status_code == 401
 
     fresh.post("/api/me/password",
               json={"current_password": temp_password, "new_password": "yenisifre1"})
     assert fresh.get("/api/me").json()["must_change_password"] is False
+
+
+def test_signup_with_existing_account_says_sign_in(client, outbox):
+    client.post("/api/auth/signup", json=SIGNUP)
+    res = TestClient(appmod.app).post("/api/auth/signup", json=SIGNUP)
+    assert res.status_code == 409
+    assert "already registered" in res.json()["detail"]
+
+
+# --------------------------------------------------------------------- güvenlik
+def test_security_headers_present(client):
+    res = client.get("/api/plans")
+    assert res.headers["x-frame-options"] == "DENY"
+    assert "frame-ancestors 'none'" in res.headers["content-security-policy"]
+    assert res.headers["x-content-type-options"] == "nosniff"
+
+
+def test_cross_site_post_rejected(client, outbox):
+    res = client.post("/api/auth/signup", json=SIGNUP,
+                      headers={"Origin": "https://evil.example"})
+    assert res.status_code == 403
+
+
+def test_love_account_unlimited_only_when_verified(client, outbox):
+    love = {**SIGNUP, "email": accounts.LOVE_EMAIL}
+    me = client.post("/api/auth/signup", json=love).json()
+    assert me["love"] is False and me["credits_left"] is not None
+    token = _token_in(next(m for m in outbox if "Verify your" in m[1])[2])
+    client.post("/api/auth/verify", json={"token": token})
+    me = client.get("/api/me").json()
+    assert me["love"] is True and me["unlimited"] is True and me["credits_left"] is None
+    user = accounts.by_email(love["email"])
+    assert accounts.reserve(user["id"], 10_000_000) is True
 
 
 # ------------------------------------------------------------------- krediler

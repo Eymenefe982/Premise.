@@ -26,6 +26,11 @@
   .credits{ display:flex; align-items:baseline; gap:9px; }
   .credits b{ font-size:30px; font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
   .credits small{ color:var(--muted); font-size:13px; }
+  .love{ display:inline-flex; align-items:center; gap:6px; color:#c2185b; font-weight:600; font-size:14px; }
+  .love .heart{ color:#e91e63; font-size:22px; display:inline-block; animation:beat 1.4s ease-in-out infinite; }
+  @keyframes beat{ 0%,100%{transform:scale(1)} 15%{transform:scale(1.25)} 30%{transform:scale(1)} 45%{transform:scale(1.15)} }
+  .love[hidden]{ display:none; }
+  @media (prefers-reduced-motion: reduce){ .love .heart{ animation:none; } }
 
   .rows{ display:flex; flex-direction:column; }
   .row{ display:flex; justify-content:space-between; gap:16px; padding:10px 0; border-top:1px solid var(--border); font-size:13.5px; }
@@ -135,6 +140,7 @@
     <div class="credits">
       <b id="credits-left">—</b>
       <small id="credits-total"></small>
+      <span class="love" id="love-badge" hidden><span class="heart" aria-hidden="true">♥</span>For my love</span>
     </div>
     <div class="meter"><i id="credits-bar" style="width:0"></i></div>
     <div class="rows" style="margin-top:14px">
@@ -186,6 +192,7 @@
     $('key-state').textContent = me.has_ncbi_key ? 'on file' : 'none';
     $('plan-line').textContent = me.is_admin
       ? 'Administrator account — all features unlimited.'
+      : me.love ? 'Unlimited credits · full-text reading on'
       : `${me.plan_label} plan · full-text reading ${me.fulltext_allowed ? 'on' : 'off'}`;
     $('period').textContent = (me.period_start || '').slice(0, 10);
 
@@ -198,7 +205,8 @@
       $('verify-email').hidden = false;
     }
 
-    if (me.is_admin){
+    $('love-badge').hidden = !me.love;
+    if (me.unlimited || me.is_admin){
       $('credits-left').textContent = '∞';
       $('credits-total').textContent = 'unlimited';
       $('credits-bar').style.width = '100%';

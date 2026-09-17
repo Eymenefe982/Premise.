@@ -73,6 +73,16 @@ REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "30"))
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
+# Sınırsız kredili, arayüzde kalp rozetiyle gösterilen özel hesap. Yalnızca e-postası
+# doğrulanmışsa geçerlidir; yoksa bu adresle ilk kaydolan herkes sınırsız kredi alırdı.
+LOVE_EMAIL = os.getenv("LOVE_EMAIL", "elifelifkimelif@gmail.com").strip().lower()
+
+# Render gibi bir ters vekilin arkasında request.client.host vekilin adresidir; bütün
+# kullanıcılar tek IP görünür ve IP başına hız sınırları herkesi birlikte kilitler.
+# Açıkken istemci IP'si vekilin eklediği başlıklardan okunur (Render'da otomatik açık).
+TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "1" if os.getenv("RENDER") else "0"
+                                ).strip() not in ("0", "false", "False")
+
 # Tarayıcıdan gelen isteklerde izin verilen kaynaklar (virgülle ayrılır)
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 

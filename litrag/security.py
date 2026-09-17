@@ -23,6 +23,15 @@ def hash_password(password: str) -> str:
     return _hasher.hash(password)
 
 
+# Kayıtlı olmayan bir e-postayla giriş denendiğinde de aynı argon2 işi yapılır; yoksa
+# yanıt süresi, adresin kayıtlı olup olmadığını ele verir.
+_DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
+
+
+def burn_password_check(password: str) -> None:
+    verify_password(_DUMMY_HASH, password)
+
+
 def verify_password(stored_hash: str, password: str) -> bool:
     try:
         _hasher.verify(stored_hash, password)
@@ -106,19 +115,42 @@ class Throttle:
         self._hits: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
 
+    MAX_KEYS = 20_000
+
+    def _sweep(self, now: float) -> None:
+        """Süresi geçmiş bütün anahtarları atar.
+
+        İstemci IP'si başlıktan okunduğu için saldırgan istediği kadar farklı anahtar
+        üretebilir; sözlük kendiliğinden temizlenmezse bu tek başına bir bellek
+        tüketme yolu olur."""
+        for key, hits in list(self._hits.items()):
+            if not hits or now - hits[-1] > self.window:
+                self._hits.pop(key, None)
+
     def allow(self, key: str) -> bool:
         now = time.monotonic()
         with self._lock:
+            if len(self._hits) > self.MAX_KEYS:
+                self._sweep(now)
             hits = self._hits[key]
             while hits and now - hits[0] > self.window:
                 hits.popleft()
-            if not hits and key in self._hits and len(self._hits) > 5000:
-                self._hits.pop(key, None)      # boşalan anahtarları biriktirme
             if len(hits) >= self.limit:
                 return False
             hits.append(now)
             self._hits[key] = hits
             return True
+
+    def blocked(self, key: str) -> bool:
+        """Sayacı artırmadan sınırın dolup dolmadığını söyler."""
+        now = time.monotonic()
+        with self._lock:
+            hits = self._hits.get(key)
+            if not hits:
+                return False
+            while hits and now - hits[0] > self.window:
+                hits.popleft()
+            return len(hits) >= self.limit
 
     def retry_after(self, key: str) -> int:
         with self._lock:
@@ -130,6 +162,9 @@ class Throttle:
 
 # Giriş denemeleri kaba kuvvete karşı dar, arama ise normal kullanımı engellemeyecek kadar geniş.
 login_throttle = Throttle(limit=8, window_seconds=300)
+# IP'den bağımsız, hesap başına yalnızca BAŞARISIZ denemeleri sayar: IP değiştirerek
+# tek bir hesaba dağıtık kaba kuvvet yapılmasını engeller.
+login_failures = Throttle(limit=20, window_seconds=3600)
 signup_throttle = Throttle(limit=5, window_seconds=3600)
 search_throttle = Throttle(limit=20, window_seconds=60)
 # Şifre sıfırlama dar tutulur: bu uç, bir e-posta adresinin kayıtlı olup

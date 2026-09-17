@@ -10,23 +10,27 @@ import json
 import os
 import queue
 import threading
+import time
+import traceback
 import uuid
 import webbrowser
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import (FileResponse, JSONResponse, PlainTextResponse,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
 from litrag import accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
                            GEMINI_API_KEYS, GEMINI_MODEL, GROQ_API_KEY, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
-                           VERIFY_TOKEN_HOURS, WEB_DIR)
+                           TRUST_PROXY_HEADERS, VERIFY_TOKEN_HOURS, WEB_DIR)
 from litrag.pdf import to_pdf
 from litrag.pipeline import SearchCancelled, SearchRequest, run_search
 from litrag.schemas import (ExportIn, ForgotPasswordIn, GrantIn, LibraryIn, LoginIn,
@@ -60,11 +64,45 @@ if ALLOWED_ORIGINS:
         allow_headers=["Content-Type"],
     )
 
+_CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
+        "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
+        "frame-ancestors 'none'")
+
+
+@app.middleware("http")
+async def _hardening(request: Request, call_next):
+    """Tarayıcı tarafı savunma başlıkları ve durum değiştiren isteklerde köken kontrolü.
+
+    Çerezler SameSite=Lax olsa da başka bir siteden gelen POST/DELETE burada ayrıca
+    reddedilir (CSRF'e karşı ikinci katman)."""
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if origin and origin not in ALLOWED_ORIGINS \
+                and urlparse(origin).netloc != request.headers.get("host", ""):
+            return JSONResponse({"detail": "Cross-site request rejected."}, status_code=403)
+    response = await call_next(request)
+    headers = response.headers
+    headers.setdefault("Content-Security-Policy", _CSP)
+    headers.setdefault("X-Content-Type-Options", "nosniff")
+    headers.setdefault("X-Frame-Options", "DENY")
+    headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if COOKIE_SECURE:
+        headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    if request.url.path.startswith("/api/"):
+        headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
 ACCESS_COOKIE = "premise_session"
 REFRESH_COOKIE = "premise_refresh"
 
-# job_id -> {"events": Queue, "user_id": int}
+# job_id -> {"events": Queue, "user_id": int, "finished_at": float | None}
 _jobs: dict[str, dict] = {}
+MAX_ACTIVE_JOBS_PER_USER = 2
+_ORPHAN_JOB_SECONDS = 600
 _cancelled: set[str] = set()
 
 
@@ -117,6 +155,16 @@ def require_admin(user: dict = Depends(current_user)) -> dict:
 
 
 def _client_key(request: Request) -> str:
+    """İstemcinin IP'si. Vekil arkasında vekilin kendi adresi herkes için aynıdır;
+    o yüzden vekilin koyduğu başlıklar okunur (bkz. config.TRUST_PROXY_HEADERS)."""
+    if TRUST_PROXY_HEADERS:
+        for name in ("true-client-ip", "cf-connecting-ip"):
+            value = request.headers.get(name, "").strip()
+            if value:
+                return value
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -137,13 +185,16 @@ async def signup(body: SignupIn, request: Request, response: Response) -> dict:
 
 @app.post("/api/auth/login")
 async def login(body: LoginIn, request: Request, response: Response) -> dict:
-    key = f"{_client_key(request)}:{body.email}"
-    if not security.login_throttle.allow(key):
+    email = str(body.email).lower()
+    key = f"{_client_key(request)}:{email}"
+    if not security.login_throttle.allow(key) or security.login_failures.blocked(email):
         raise HTTPException(
             429, "Too many failed login attempts. Please wait a moment.",
-            headers={"Retry-After": str(security.login_throttle.retry_after(key))})
-    user = accounts.authenticate(str(body.email), body.password)
+            headers={"Retry-After": str(max(security.login_throttle.retry_after(key),
+                                            security.login_failures.retry_after(email)))})
+    user = accounts.authenticate(email, body.password)
     if user is None:
+        security.login_failures.allow(email)
         raise HTTPException(401, "Incorrect email or password.")
     return _login_response(response, user)
 
@@ -273,10 +324,19 @@ def _worker(job_id: str, req: SearchRequest, user_id: int, reserved: int) -> Non
         events.put({"type": "cancelled"})
     except Exception as exc:
         accounts.settle(user_id, reserved, 0, "search failed")
-        events.put({"type": "error", "message": str(exc)})
+        # Ham istisna metni kullanıcıya gönderilmez: sağlayıcı hataları istek URL'sini
+        # (ve içindeki API anahtarını) ya da iç ayrıntıları taşıyabilir.
+        if isinstance(exc, ValueError):
+            message = str(exc)
+        else:
+            traceback.print_exc()
+            message = "The search could not be completed. Please try again in a moment."
+        events.put({"type": "error", "message": message})
     finally:
         events.put(None)
         _cancelled.discard(job_id)
+        if job_id in _jobs:
+            _jobs[job_id]["finished_at"] = time.monotonic()
 
 
 @app.post("/api/search")
@@ -289,6 +349,17 @@ async def start_search(body: SearchIn, request: Request,
         raise HTTPException(403, "Please verify your email address before searching. "
                                  "You can request a new verification link from your "
                                  "account page.")
+
+    # Akışı hiç okunmamış bitmiş işler bellekte birikmesin.
+    now = time.monotonic()
+    for old_id, job in list(_jobs.items()):
+        if job.get("finished_at") and now - job["finished_at"] > _ORPHAN_JOB_SECONDS:
+            _jobs.pop(old_id, None)
+    active = sum(1 for j in _jobs.values()
+                 if j["user_id"] == user["id"] and not j.get("finished_at"))
+    if active >= MAX_ACTIVE_JOBS_PER_USER:
+        raise HTTPException(429, "You already have searches running. Please wait for "
+                                 "them to finish.")
 
     payload = body.model_dump()
     # Ücretsiz katmanda tam metin okuma kapalıdır — en pahalı adım budur.
@@ -306,7 +377,7 @@ async def start_search(body: SearchIn, request: Request,
                                  f"buy extra credits.")
 
     job_id = uuid.uuid4().hex[:12]
-    _jobs[job_id] = {"events": queue.Queue(), "user_id": user["id"]}
+    _jobs[job_id] = {"events": queue.Queue(), "user_id": user["id"], "finished_at": None}
     threading.Thread(target=_worker, args=(job_id, req, user["id"], needed),
                      daemon=True).start()
     return {"job_id": job_id, "estimated_credits": needed}

@@ -11,11 +11,12 @@ from cryptography.fernet import Fernet
 from . import security
 from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, CREDIT_BASE, CREDIT_PER_ARTICLE,
                      CREDIT_PER_FULLTEXT, CREDIT_SYNTHESIS, CREDIT_VERIFY, JWT_SECRET,
-                     PLANS, SECRET_KEY)
+                     LOVE_EMAIL, PLANS, SECRET_KEY)
 from .store import conn, migrate_library
 
 _lock = threading.Lock()
 PERIOD_DAYS = 30
+TEMP_PASSWORD_LIFETIME = timedelta(hours=1)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -142,16 +143,20 @@ def create_user(email: str, password: str, role: str, plan: str = "free",
             )
             conn().commit()
         except sqlite3.IntegrityError:
-            raise ValueError("This email address is already registered.")
+            raise ValueError("This account is already registered. Please sign in instead.")
     return by_id(int(cur.lastrowid))
 
 
 def authenticate(email: str, password: str) -> dict | None:
     user = by_email(email)
-    if not user or not security.verify_password(user["password_hash"], password):
+    if not user:
+        security.burn_password_check(password)
         return None
-    if security.needs_rehash(user["password_hash"]):
-        set_password(user["id"], password)
+    if security.verify_password(user["password_hash"], password):
+        if security.needs_rehash(user["password_hash"]):
+            set_password(user["id"], password)
+    elif not _redeem_temp_password(user["id"], password):
+        return None
     with _lock:
         conn().execute("UPDATE users SET last_login_at = ? WHERE id = ?", (_now(), user["id"]))
         conn().commit()
@@ -178,19 +183,46 @@ def set_password(user_id: int, password: str) -> None:
 
 
 def issue_temp_password(user_id: int) -> str:
-    """"Şifremi unuttum" akışı: kalıcı bir şifre yerine tek seferlik geçici bir şifre üretir.
+    """"Şifremi unuttum" akışı: tek seferlik, kısa ömürlü geçici bir şifre üretir.
 
-    Doğrudan giriş yapılabilir bir şifre e-postayla gönderilir; `must_change_password`
-    işaretlenir ki kullanıcı hesabından kalıcı bir şifre belirleyene kadar arayüz onu
-    hatırlatsın. Diğer cihazlardaki eski oturumlar da bununla birlikte düşer."""
-    temp_password = secrets.token_urlsafe(9)
+    Mevcut şifreye DOKUNULMAZ. Önceden şifre isteğin anında değiştiriliyordu; bu,
+    e-posta adresini bilen herkesin hesap sahibini dışarıda bırakıp oturumlarını
+    düşürebilmesi demekti. Geçici şifre ancak kullanıldığında kalıcı şifrenin yerine
+    geçer (bkz. `_redeem_temp_password`)."""
+    temp_password = secrets.token_urlsafe(12)
+    expires = (datetime.now() + TEMP_PASSWORD_LIFETIME).strftime("%Y-%m-%d %H:%M:%S")
     with _lock:
+        conn().execute("DELETE FROM auth_tokens WHERE user_id = ? AND kind = 'temp'",
+                       (user_id,))
+        conn().execute(
+            "INSERT INTO auth_tokens (fingerprint, user_id, kind, expires_at)"
+            " VALUES (?,?,'temp',?)",
+            (security.token_fingerprint(temp_password), user_id, expires))
+        conn().commit()
+    return temp_password
+
+
+def _redeem_temp_password(user_id: int, password: str) -> bool:
+    """Geçici şifre geçerliyse onu kalıcı şifre yapar, `must_change_password` işaretler
+    ve diğer cihazlardaki oturumları düşürür."""
+    fingerprint = security.token_fingerprint(password)
+    with _lock:
+        row = conn().execute(
+            "SELECT expires_at, used_at FROM auth_tokens"
+            " WHERE fingerprint = ? AND kind = 'temp' AND user_id = ?",
+            (fingerprint, user_id)).fetchone()
+        if row is None or row["used_at"]:
+            return False
+        if datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.now():
+            return False
+        conn().execute("DELETE FROM auth_tokens WHERE user_id = ? AND kind = 'temp'",
+                       (user_id,))
         conn().execute(
             "UPDATE users SET password_hash = ?, must_change_password = 1,"
             " session_epoch = session_epoch + 1 WHERE id = ?",
-            (security.hash_password(temp_password), user_id))
+            (security.hash_password(password), user_id))
         conn().commit()
-    return temp_password
+    return True
 
 
 def _seed_admin() -> None:
@@ -227,6 +259,15 @@ def is_admin(user: dict) -> bool:
     return user.get("role") == "admin"
 
 
+def is_love(user: dict) -> bool:
+    """Kalp rozetli özel hesap. E-posta doğrulanmadan tanınmaz."""
+    return bool(LOVE_EMAIL) and (user.get("email") or "").lower() == LOVE_EMAIL         and bool(user.get("email_verified_at"))
+
+
+def is_unlimited(user: dict) -> bool:
+    return is_admin(user) or is_love(user)
+
+
 def plan_of(user: dict) -> dict:
     return PLANS.get(user.get("plan") or "free", PLANS["free"])
 
@@ -244,8 +285,8 @@ def roll_period(user: dict) -> dict:
 
 
 def balance(user: dict) -> int | None:
-    """Kalan kredi. Yönetici için sınır yoktur, None döner."""
-    if is_admin(user):
+    """Kalan kredi. Yönetici ve özel hesap için sınır yoktur, None döner."""
+    if is_unlimited(user):
         return None
     allowance = plan_of(user)["credits"] + int(user["credits_extra"] or 0)
     return max(0, allowance - int(user["credits_used"] or 0))
@@ -278,7 +319,7 @@ def reserve(user_id: int, amount: int) -> bool:
     user = by_id(user_id)
     if user is None:
         return False
-    if is_admin(user):
+    if is_unlimited(user):
         return True
     with _lock:
         row = conn().execute(
@@ -308,7 +349,7 @@ def settle(user_id: int, reserved: int, actual: int, reason: str,
     if user is None:
         return 0
     with _lock:
-        if not is_admin(user) and reserved != actual:
+        if not is_unlimited(user) and reserved != actual:
             conn().execute("UPDATE users SET credits_used = MAX(0, credits_used + ?)"
                            " WHERE id = ?", (actual - reserved, user_id))
         if actual:
@@ -327,7 +368,7 @@ def charge(user_id: int, amount: int, reason: str, report_id: int | None = None)
     if user is None:
         return
     with _lock:
-        if not is_admin(user):
+        if not is_unlimited(user):
             conn().execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?",
                            (amount, user_id))
         conn().execute(
@@ -421,9 +462,11 @@ def public(user: dict) -> dict:
         "plan": user["plan"],
         "plan_label": plan["label"],
         "is_admin": is_admin(user),
-        "credits_total": None if is_admin(user) else plan["credits"] + int(user["credits_extra"] or 0),
+        "credits_total": None if is_unlimited(user) else plan["credits"] + int(user["credits_extra"] or 0),
         "credits_left": balance(user),
-        "fulltext_allowed": True if is_admin(user) else plan["fulltext"],
+        "unlimited": is_unlimited(user),
+        "love": is_love(user),
+        "fulltext_allowed": True if is_unlimited(user) else plan["fulltext"],
         "has_ncbi_key": bool(user.get("ncbi_key_enc")),
         "email_verified": bool(user.get("email_verified_at")),
         "must_change_password": bool(user.get("must_change_password")),

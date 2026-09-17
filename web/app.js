@@ -27,6 +27,13 @@ function esc(text) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+/* Only http(s) links reach an href: external records (Unpaywall, OpenAlex...) could
+   otherwise carry a javascript: URL or a quote that breaks out of the attribute. */
+function safeUrl(url) {
+  const value = String(url ?? "").trim();
+  return /^https?:\/\//i.test(value) ? esc(value) : "#";
+}
+
 let toastTimer;
 function toast(message) {
   const el = $("#toast");
@@ -374,9 +381,9 @@ function openDrawer(claimId) {
     const hasFullText = Boolean((state.result?.sources || {})[pmid]);
 
     const links = [
-      `<a href="https://pubmed.ncbi.nlm.nih.gov/${pmid}/" target="_blank" rel="noopener">PubMed</a>`,
-      article?.pmc_url ? `<a href="${article.pmc_url}" target="_blank" rel="noopener">PMC</a>` : "",
-      article?.pdf_url ? `<a href="${esc(article.pdf_url)}" target="_blank" rel="noopener">PDF</a>` : "",
+      `<a href="https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(pmid)}/" target="_blank" rel="noopener">PubMed</a>`,
+      article?.pmc_url ? `<a href="${safeUrl(article.pmc_url)}" target="_blank" rel="noopener">PMC</a>` : "",
+      article?.pdf_url ? `<a href="${safeUrl(article.pdf_url)}" target="_blank" rel="noopener">PDF</a>` : "",
     ].filter(Boolean).join("");
 
     const body = passages.length
@@ -396,7 +403,7 @@ function openDrawer(claimId) {
 
     return `<section class="drawer-article">
               <h4>${esc(article?.title || "PMID " + pmid)}</h4>
-              <p class="drawer-meta">${esc(article?.journal || "")} ${article?.year || ""} ·
+              <p class="drawer-meta">${esc(article?.journal || "")} ${esc(article?.year || "")} ·
                  ${hasFullText ? "abstract and full text searched" : "abstract searched"}</p>
               <div class="drawer-links">${links}</div>
               ${body}
@@ -430,9 +437,9 @@ function statBadges(a) {
   return [
     `<span class="badge badge-ev">${esc(a.evidence_label)}</span>`,
     showDesign ? `<span class="badge">${esc(a.design)}</span>` : "",
-    a.year ? `<span class="badge">${a.year}</span>` : "",
+    a.year ? `<span class="badge">${esc(a.year)}</span>` : "",
     a.sample_size ? `<span class="badge badge-n">n = ${Number(a.sample_size).toLocaleString("en-US")}</span>` : "",
-    a.citations ? `<span class="badge">${a.citations} citations</span>` : "",
+    a.citations ? `<span class="badge">${esc(a.citations)} citations</span>` : "",
     a.is_oa || a.pmcid ? '<span class="badge badge-oa">Free full text</span>' : "",
     a.fulltext_used
       ? '<span class="badge badge-ft" title="The synthesis draws on this article\'s full text">Full text read</span>'
@@ -460,10 +467,10 @@ function findingsTable(a) {
 
 function articleLinks(a) {
   return [
-    a.pmid ? `<a href="${a.pubmed_url}" target="_blank" rel="noopener">PMID ${a.pmid}</a>` : "",
-    a.pmc_url ? `<a href="${a.pmc_url}" target="_blank" rel="noopener">PMC</a>` : "",
-    a.pdf_url ? `<a href="${esc(a.pdf_url)}" target="_blank" rel="noopener">PDF</a>` : "",
-    a.doi_url ? `<a href="${esc(a.doi_url)}" target="_blank" rel="noopener">DOI</a>` : "",
+    a.pmid ? `<a href="${safeUrl(a.pubmed_url)}" target="_blank" rel="noopener">PMID ${esc(a.pmid)}</a>` : "",
+    a.pmc_url ? `<a href="${safeUrl(a.pmc_url)}" target="_blank" rel="noopener">PMC</a>` : "",
+    a.pdf_url ? `<a href="${safeUrl(a.pdf_url)}" target="_blank" rel="noopener">PDF</a>` : "",
+    a.doi_url ? `<a href="${safeUrl(a.doi_url)}" target="_blank" rel="noopener">DOI</a>` : "",
   ].filter(Boolean).join("");
 }
 
@@ -486,7 +493,7 @@ function renderBibliography() {
     <ol class="bib-list">
       ${items.map((a) => `
         <li class="bib-item">
-          <a class="bib-title" href="${a.best_free_url || a.pubmed_url || "#"}"
+          <a class="bib-title" href="${safeUrl(a.best_free_url || a.pubmed_url)}"
              target="_blank" rel="noopener">${esc(a.title)}</a>
           <p class="bib-meta">${esc(a.authors || "Authors not listed in the record")}${a.journal ? " · " + esc(a.journal) : ""}</p>
           ${a.population ? `<p class="bib-pop">Population: ${esc(a.population)}</p>` : ""}
@@ -581,12 +588,12 @@ function renderAgreement(result) {
         .map(([k, v]) => `${v} ${v === 1 ? "study" : "studies"} ${word[k]}`).join(" · ");
       const rows = g.entries.map((e) => `
         <tr>
-          <td><a href="https://pubmed.ncbi.nlm.nih.gov/${e.pmid}/" target="_blank"
+          <td><a href="https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(e.pmid)}/" target="_blank"
                  rel="noopener">PMID ${esc(e.pmid)}</a></td>
-          <td>${e.year || ""}</td>
+          <td>${esc(e.year || "")}</td>
           <td class="f-value">${esc([e.measure, e.value].filter(Boolean).join(" "))}</td>
           <td class="f-ci">${e.ci ? "95% CI " + esc(e.ci) : ""}</td>
-          <td><span class="dir dir-${e.direction}">${word[e.direction]}</span></td>
+          <td><span class="dir dir-${esc(e.direction)}">${esc(word[e.direction] || e.direction)}</span></td>
         </tr>`).join("");
       return `<div class="agree-group">
                 <div class="agree-head">
@@ -614,7 +621,7 @@ function renderClaimFlags(result) {
        what the source actually says.</p>
     <ul>
       ${flags.map((f) => `<li>
-         <span class="badge badge-off">${label[f.verdict] || f.verdict}</span>
+         <span class="badge badge-off">${esc(label[f.verdict] || f.verdict)}</span>
          <span class="flag-reason">${esc(f.reason)}</span>
          <blockquote>${esc(f.sentence)}</blockquote>
        </li>`).join("")}
@@ -702,8 +709,8 @@ function renderArticles() {
     const badges = statBadges(a) + (a.journal ? `<span class="badge">${esc(a.journal)}</span>` : "");
     return `
       <div class="card" data-index="${i}">
-        <span class="card-score">${a.score.toFixed(1)}</span>
-        <h4 class="card-title"><a href="${a.best_free_url || "#"}" target="_blank" rel="noopener">${esc(a.title)}</a></h4>
+        <span class="card-score">${Number(a.score || 0).toFixed(1)}</span>
+        <h4 class="card-title"><a href="${safeUrl(a.best_free_url)}" target="_blank" rel="noopener">${esc(a.title)}</a></h4>
         <p class="card-authors">${esc(a.authors || "Authors not listed in the record")}</p>
         <div class="badges">${badges}</div>
         ${findingsTable(a)}
@@ -748,7 +755,7 @@ function renderClinical(clinical) {
         <p>Continuously updated clinical summaries, free to read in full on NCBI Bookshelf.</p>
         <div class="grid-2">
           ${chapters.map((c) => `
-            <a class="res-card" href="${esc(c.url)}" target="_blank" rel="noopener">
+            <a class="res-card" href="${safeUrl(c.url)}" target="_blank" rel="noopener">
               <b>${esc(c.title)}</b>
               <small>${esc(c.note)}${c.year ? " · " + esc(c.year) : ""}</small>
               <span class="res-src">${esc(c.source)}</span>
@@ -765,10 +772,10 @@ function renderClinical(clinical) {
         <p>Publications indexed in PubMed as practice guidelines, consensus statements or systematic reviews.</p>
         <div class="grid-2">
           ${guidelines.map((g) => `
-            <a class="res-card" href="${g.best_free_url || g.pubmed_url}" target="_blank" rel="noopener">
+            <a class="res-card" href="${safeUrl(g.best_free_url || g.pubmed_url)}" target="_blank" rel="noopener">
               <b>${esc(g.title)}</b>
-              <small>${esc(g.journal)} ${g.year} · ${esc(g.evidence_label)}${g.is_oa ? " · free full text" : ""}</small>
-              <span class="res-src">PubMed ${g.pmid}</span>
+              <small>${esc(g.journal)} ${esc(g.year)} · ${esc(g.evidence_label)}${g.is_oa ? " · free full text" : ""}</small>
+              <span class="res-src">PubMed ${esc(g.pmid)}</span>
             </a>`).join("")}
         </div>
       </div>`);
@@ -782,7 +789,7 @@ function renderClinical(clinical) {
         <p>Clinical decision resources, pre-filled with your question. Subscription resources have a dashed border.</p>
         <div class="grid-2">
           ${links.map((l) => `
-            <a class="res-card ${l.free ? "" : "locked"}" href="${esc(l.url)}" target="_blank" rel="noopener">
+            <a class="res-card ${l.free ? "" : "locked"}" href="${safeUrl(l.url)}" target="_blank" rel="noopener">
               <b>${esc(l.title)}</b>
               <small>${esc(l.note)}</small>
               <span class="res-src">${esc(l.source)}${l.free ? "" : " · subscription"}</span>
@@ -882,10 +889,10 @@ async function loadHistory() {
     <div class="row">
       <div class="row-main">
         <b>${esc(r.topic || r.query)}</b>
-        <small>${esc(r.created_at)} · ${r.article_count} articles · ${esc(r.language || "")}</small>
+        <small>${esc(r.created_at)} · ${esc(r.article_count)} articles · ${esc(r.language || "")}</small>
       </div>
-      <button class="link-btn" data-load="${r.id}">Open</button>
-      <button class="link-btn" data-del="${r.id}" style="color:var(--muted)">Delete</button>
+      <button class="link-btn" data-load="${Number(r.id)}">Open</button>
+      <button class="link-btn" data-del="${Number(r.id)}" style="color:var(--muted)">Delete</button>
     </div>`).join("");
 
   box.querySelectorAll("[data-load]").forEach((btn) =>
@@ -911,10 +918,10 @@ async function loadLibrary() {
   box.innerHTML = rows.map((r) => `
     <div class="row">
       <div class="row-main">
-        <b><a href="${esc(r.url || "#")}" target="_blank" rel="noopener">${esc(r.title)}</a></b>
-        <small>${esc(r.journal || "")} ${r.year || ""} · ${esc((r.authors || "").split(",")[0])} et al.</small>
+        <b><a href="${safeUrl(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a></b>
+        <small>${esc(r.journal || "")} ${esc(r.year || "")} · ${esc((r.authors || "").split(",")[0])} et al.</small>
       </div>
-      <button class="link-btn" data-rm="${r.id}" style="color:var(--muted)">Remove</button>
+      <button class="link-btn" data-rm="${Number(r.id)}" style="color:var(--muted)">Remove</button>
     </div>`).join("");
   box.querySelectorAll("[data-rm]").forEach((btn) =>
     btn.addEventListener("click", async () => {
@@ -941,7 +948,11 @@ async function loadAccount() {
     return null;
   }
 
-  if (me.is_admin) {
+  if (me.love) {
+    pill.className = "pill pill-love";
+    pill.innerHTML = '<span class="love-heart" aria-hidden="true">♥</span> ∞ credits · For my love';
+    pill.title = "Unlimited credits";
+  } else if (me.is_admin) {
     pill.className = "pill";
     pill.textContent = "admin · unlimited";
   } else {
