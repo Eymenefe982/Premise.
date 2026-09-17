@@ -41,18 +41,31 @@ def _token_in(body: str) -> str:
     return body.split("token=")[1].split()[0]
 
 
+def _temp_password_in(body: str) -> str:
+    return body.split("oluşturuldu:\n\n")[1].split("\n")[0]
+
+
 # ------------------------------------------------------------------------ kayıt
-def test_signup_sends_verification_and_logs_in(client, outbox):
+def test_signup_sends_verification_and_welcome_and_logs_in(client, outbox):
     res = client.post("/api/auth/signup", json=SIGNUP)
     assert res.status_code == 200
     assert res.json()["email_verified"] is False
-    assert len(outbox) == 1
+    assert len(outbox) == 2              # doğrulama + hoş geldiniz
     assert client.get("/api/me").status_code == 200
+
+
+def test_invalid_email_is_rejected_with_turkish_message(client, outbox):
+    bad = {**SIGNUP, "email": "gecersiz-adres"}
+    res = client.post("/api/auth/signup", json=bad)
+    assert res.status_code == 422
+    assert "Geçerli bir e-posta adresi girin." in res.text
+    assert not outbox
 
 
 def test_verification_token_works_once(client, outbox):
     client.post("/api/auth/signup", json=SIGNUP)
-    token = _token_in(outbox[-1][2])
+    verify_mail = next(m for m in outbox if "doğrulayın" in m[1])
+    token = _token_in(verify_mail[2])
     assert client.post("/api/auth/verify", json={"token": token}).status_code == 200
     assert client.get("/api/me").json()["email_verified"] is True
     # Aynı bağlantı ikinci kez çalışmamalı
@@ -70,58 +83,33 @@ def test_forgot_does_not_reveal_whether_an_account_exists(client, outbox):
     assert len(outbox) == 1              # posta yalnızca kayıtlı adrese gider
 
 
-def test_reset_token_is_not_stored_in_plain_text(client, outbox):
+def test_forgot_revokes_existing_sessions(client, outbox):
     client.post("/api/auth/signup", json=SIGNUP)
+    assert client.get("/api/me").status_code == 200
     client.post("/api/auth/forgot", json={"email": SIGNUP["email"]})
-    token = _token_in(outbox[-1][2])
-    stored = [r["fingerprint"] for r in conn().execute("SELECT fingerprint FROM auth_tokens")]
-    assert stored and token not in stored
+    assert client.get("/api/me").status_code == 401      # eski oturum düştü
 
 
-def test_reset_revokes_other_sessions_but_keeps_this_one(client, outbox):
+def test_temp_password_logs_in_and_flags_must_change(client, outbox):
     client.post("/api/auth/signup", json=SIGNUP)
+    outbox.clear()
     client.post("/api/auth/forgot", json={"email": SIGNUP["email"]})
-    token = _token_in(outbox[-1][2])
-
-    # Başka bir cihazdaki açık oturum
-    other = TestClient(appmod.app)
-    other.cookies.update(client.cookies)
-    assert other.get("/api/me").status_code == 200
-
-    assert client.post("/api/auth/reset",
-                       json={"token": token, "new_password": "yenisifre1"}).status_code == 200
-    assert other.get("/api/me").status_code == 401       # eski oturum düştü
-    assert client.get("/api/me").status_code == 200      # sıfırlayan oturum devam eder
-
-
-def test_reset_token_cannot_be_replayed(client, outbox):
-    client.post("/api/auth/signup", json=SIGNUP)
-    client.post("/api/auth/forgot", json={"email": SIGNUP["email"]})
-    token = _token_in(outbox[-1][2])
-    client.post("/api/auth/reset", json={"token": token, "new_password": "yenisifre1"})
-    again = client.post("/api/auth/reset", json={"token": token, "new_password": "baskabir1"})
-    assert again.status_code == 400
-
-
-def test_password_actually_changes(client, outbox):
-    client.post("/api/auth/signup", json=SIGNUP)
-    client.post("/api/auth/forgot", json={"email": SIGNUP["email"]})
-    token = _token_in(outbox[-1][2])
-    client.post("/api/auth/reset", json={"token": token, "new_password": "yenisifre1"})
+    temp_password = _temp_password_in(outbox[-1][2])
 
     fresh = TestClient(appmod.app)
+    # Eski şifre artık geçersiz
     assert fresh.post("/api/auth/login",
                       json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
                       ).status_code == 401
-    assert fresh.post("/api/auth/login",
-                      json={"email": SIGNUP["email"], "password": "yenisifre1"}
-                      ).status_code == 200
 
+    res = fresh.post("/api/auth/login",
+                     json={"email": SIGNUP["email"], "password": temp_password})
+    assert res.status_code == 200
+    assert res.json()["must_change_password"] is True
 
-def test_invalid_reset_token_is_rejected(client):
-    res = client.post("/api/auth/reset",
-                      json={"token": "x" * 40, "new_password": "yenisifre1"})
-    assert res.status_code == 400
+    fresh.post("/api/me/password",
+              json={"current_password": temp_password, "new_password": "yenisifre1"})
+    assert fresh.get("/api/me").json()["must_change_password"] is False
 
 
 # ------------------------------------------------------------------- krediler

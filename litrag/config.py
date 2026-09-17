@@ -90,9 +90,6 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "1").strip() not in ("0", "false", "False")
 MAIL_FROM = os.getenv("MAIL_FROM", "").strip()
 
-# Şifre sıfırlama bağlantısı kısa ömürlüdür: çalınmış bir e-posta kutusunun
-# değeri zamanla düşsün.
-RESET_TOKEN_MINUTES = int(os.getenv("RESET_TOKEN_MINUTES", "45"))
 VERIFY_TOKEN_HOURS = int(os.getenv("VERIFY_TOKEN_HOURS", "48"))
 
 # Açıkken doğrulanmamış e-postayla arama yapılamaz. Mevcut hesapları kırmamak için

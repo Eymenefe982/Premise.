@@ -87,6 +87,13 @@
     <p class="sub">Başlamadan önce tek bir adım kaldı: kendi NCBI arama anahtarınız.</p>
   </div>
 
+  <!-- geçici şifreyle giren kullanıcı -->
+  <div class="card" id="force-pw" hidden>
+    <h2>Şifrenizi değiştirin</h2>
+    <p class="sub">Geçici bir şifreyle giriş yaptınız. Devam etmeden önce aşağıdan
+      kalıcı bir şifre belirleyin.</p>
+  </div>
+
   <!-- NCBI anahtarı -->
   <div class="card">
     <h2>NCBI arama anahtarı <span class="pill" id="key-state">yok</span></h2>
@@ -170,6 +177,11 @@
       ? 'Yönetici hesabı — tüm özellikler sınırsız.'
       : `${me.plan_label} planı · tam metin okuma ${me.fulltext_allowed ? 'açık' : 'kapalı'}`;
     $('period').textContent = (me.period_start || '').slice(0, 10);
+
+    if (me.must_change_password){
+      $('force-pw').hidden = false;
+      $('pw-new').focus();
+    }
 
     if (me.is_admin){
       $('credits-left').textContent = '∞';

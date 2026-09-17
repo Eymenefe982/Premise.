@@ -127,15 +127,18 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok){
-        const data = await res.json().catch(() => ({}));
         const detail = data.detail;
         return fail(typeof detail === 'string' ? detail
                     : Array.isArray(detail) ? (detail[0]?.msg || 'Bilgileri kontrol edin.')
                     : 'Bir sorun oluştu, tekrar deneyin.');
       }
-      // Yeni kayıtta önce NCBI anahtarı sihirbazı, sonra uygulama.
-      location.replace(mode === 'signup' ? '/hesap?ilk=1' : '/');
+      // Yeni kayıtta önce NCBI anahtarı sihirbazı; geçici şifreyle girende önce kalıcı
+      // şifre belirleme, aksi halde doğrudan uygulama.
+      const dest = mode === 'signup' ? '/hesap?ilk=1'
+                 : data.must_change_password ? '/hesap' : '/';
+      location.replace(dest);
     } catch {
       fail('Sunucuya ulaşılamadı.');
     }

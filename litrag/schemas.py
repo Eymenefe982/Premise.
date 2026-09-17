@@ -3,10 +3,22 @@ from __future__ import annotations
 
 from typing import Literal
 
+from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 LANGUAGES = ("English", "Türkçe", "Deutsch", "Français", "Español")
 FILTERS = ("rct", "meta", "guideline", "free_fulltext", "humans")
+
+
+def _clean_email(v: object) -> str:
+    """E-posta biçimini kontrol eder ve Türkçe, kullanıcıya gösterilebilir bir hata verir.
+
+    `EmailStr`'in kendi hatası `email_validator` kütüphanesinden İngilizce gelir;
+    bu, arayüzde doğrudan gösterildiği için burada yakalanıp Türkçeleştirilir."""
+    try:
+        return validate_email(str(v), check_deliverability=False).normalized
+    except EmailNotValidError:
+        raise ValueError("Geçerli bir e-posta adresi girin.")
 
 
 class SignupIn(BaseModel):
@@ -14,6 +26,11 @@ class SignupIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     role: Literal["physician", "student"]
     kvkk_consent: bool
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v: object) -> str:
+        return _clean_email(v)
 
     @field_validator("kvkk_consent")
     @classmethod
@@ -27,6 +44,11 @@ class LoginIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v: object) -> str:
+        return _clean_email(v)
+
 
 class PasswordChangeIn(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
@@ -36,10 +58,10 @@ class PasswordChangeIn(BaseModel):
 class ForgotPasswordIn(BaseModel):
     email: EmailStr
 
-
-class ResetPasswordIn(BaseModel):
-    token: str = Field(min_length=16, max_length=256)
-    new_password: str = Field(min_length=8, max_length=128)
+    @field_validator("email", mode="before")
+    @classmethod
+    def valid_email(cls, v: object) -> str:
+        return _clean_email(v)
 
 
 class VerifyEmailIn(BaseModel):

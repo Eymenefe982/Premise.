@@ -74,6 +74,36 @@ değiştirmenizi öneririz.
 {APP_NAME}""")
 
 
+def send_welcome(to: str) -> None:
+    send(to, f"{APP_NAME}'e hoş geldiniz",
+         f"""Merhaba,
+
+{APP_NAME} hesabınız oluşturuldu. Klinik sorularınız için PubMed, Europe PMC ve
+diğer tıbbi kaynakları tek seferde tarayıp kanıta dayalı bir özet çıkarabilirsiniz.
+
+Hemen bir arama yaparak başlayabilirsiniz: {APP_URL}
+
+{APP_NAME}""")
+
+
+def send_temp_password(to: str, temp_password: str) -> None:
+    send(to, f"{APP_NAME} geçici şifreniz",
+         f"""Merhaba,
+
+{APP_NAME} hesabınız için bir geçici şifre oluşturuldu:
+
+{temp_password}
+
+Bu şifreyle giriş yapabilirsiniz. Diğer cihazlardaki oturumlarınız bu işlemle
+kapatıldı. Giriş yaptıktan sonra hesabınızdan ("Şifre değiştir" bölümü) kalıcı
+bir şifre belirlemenizi öneririz.
+
+Bu isteği siz yapmadıysanız, birisi hesabınıza erişmeye çalışıyor olabilir:
+giriş yapıp şifrenizi hemen değiştirin.
+
+{APP_NAME}""")
+
+
 def send_email_verification(to: str, token: str, valid_hours: int) -> None:
     link = f"{APP_URL}/eposta-dogrula?token={token}"
     send(to, f"{APP_NAME} e-posta adresinizi doğrulayın",

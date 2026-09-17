@@ -12,6 +12,7 @@ import queue
 import threading
 import uuid
 import webbrowser
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any
 
@@ -25,28 +26,17 @@ from litrag import accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
                            GEMINI_API_KEYS, GEMINI_MODEL, GROQ_API_KEY, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
-                           RESET_TOKEN_MINUTES, VERIFY_TOKEN_HOURS, WEB_DIR)
+                           VERIFY_TOKEN_HOURS, WEB_DIR)
 from litrag.pdf import to_pdf
 from litrag.pipeline import SearchCancelled, SearchRequest, run_search
 from litrag.schemas import (ExportIn, ForgotPasswordIn, GrantIn, LibraryIn, LoginIn,
-                            NcbiKeyIn, PasswordChangeIn, ResetPasswordIn, SearchIn,
+                            NcbiKeyIn, PasswordChangeIn, SearchIn,
                             SignupIn, VerifyEmailIn)
 
-app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None)
-
-if ALLOWED_ORIGINS:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "DELETE"],
-        allow_headers=["Content-Type"],
-    )
-
-@app.on_event("startup")
-def _init_db() -> None:
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
     # uvicorn'un `app:app` ile doğrudan başlatıldığı ortamlarda (ör. Render) `main()`
-    # hiç çalışmaz; şema kurulumu bu yüzden burada, ASGI startup event'inde yapılır.
+    # hiç çalışmaz; şema kurulumu bu yüzden burada, ASGI lifespan'ında yapılır.
     accounts.init()
     removed = cache.purge_expired()
     if removed:
@@ -56,7 +46,19 @@ def _init_db() -> None:
         print(f"  {stale} expired auth tokens removed")
     if not mailer.configured():
         print("  ! SMTP yapılandırılmamış: şifre sıfırlama e-postaları konsola yazılır.")
+    yield
 
+
+app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None, lifespan=_lifespan)
+
+if ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Content-Type"],
+    )
 
 ACCESS_COOKIE = "premise_session"
 REFRESH_COOKIE = "premise_refresh"
@@ -129,6 +131,7 @@ async def signup(body: SignupIn, request: Request, response: Response) -> dict:
     except ValueError as exc:
         raise HTTPException(409, str(exc))
     _send_verification(user)
+    mailer.send_welcome(user["email"])
     return _login_response(response, user)
 
 
@@ -191,35 +194,17 @@ async def forgot_password(body: ForgotPasswordIn, request: Request) -> dict:
 
     "Bu e-posta kayıtlı değil" demek, bir adresin sistemde olup olmadığını herkese
     sorulabilir hale getirir; hekimlerin kullandığı bir üründe bu tek başına bir
-    mahremiyet sızıntısıdır."""
+    mahremiyet sızıntısıdır.
+
+    Bağlantı yerine doğrudan giriş yapılabilir bir geçici şifre gönderilir; kullanıcı
+    onunla giriş yapıp hesabından kalıcı bir şifre belirler (`must_change_password`)."""
     if not security.reset_throttle.allow(_client_key(request)):
         raise HTTPException(429, "Çok fazla sıfırlama isteği. Lütfen biraz bekleyin.")
     user = accounts.by_email(str(body.email))
     if user is not None:
-        token = accounts.issue_auth_token(user["id"], "reset",
-                                          timedelta(minutes=RESET_TOKEN_MINUTES))
-        mailer.send_password_reset(user["email"], token, RESET_TOKEN_MINUTES)
-    return {"ok": True, "message": "Bu adres kayıtlıysa sıfırlama bağlantısı gönderildi."}
-
-
-@app.post("/api/auth/reset")
-async def reset_password(body: ResetPasswordIn, request: Request,
-                         response: Response) -> dict:
-    if not security.reset_throttle.allow(_client_key(request)):
-        raise HTTPException(429, "Çok fazla deneme. Lütfen biraz bekleyin.")
-    user_id = accounts.consume_auth_token(body.token, "reset")
-    if user_id is None:
-        raise HTTPException(400, "Bağlantı geçersiz ya da süresi dolmuş. "
-                                 "Yeni bir sıfırlama bağlantısı isteyin.")
-    accounts.set_password(user_id, body.new_password)
-    # Sıfırlamanın asıl amacı hesabı geri almaktır: eski oturumlar kapatılmalı.
-    accounts.bump_session_epoch(user_id)
-    user = accounts.by_id(user_id)
-    # Şifresini sıfırlayabilen kişi zaten e-posta kutusuna erişmiştir.
-    if user is not None and not user.get("email_verified_at"):
-        accounts.mark_email_verified(user_id)
-        user = accounts.by_id(user_id)
-    return _login_response(response, user)
+        temp_password = accounts.issue_temp_password(user["id"])
+        mailer.send_temp_password(user["email"], temp_password)
+    return {"ok": True, "message": "Bu adres kayıtlıysa geçici bir şifre gönderildi."}
 
 
 @app.post("/api/auth/verify")

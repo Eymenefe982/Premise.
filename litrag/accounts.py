@@ -79,6 +79,9 @@ def init() -> None:
             c.execute("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0")
         if "email_verified_at" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN email_verified_at TEXT")
+        # Geçici şifreyle giren kullanıcı kalıcı bir şifre belirleyene kadar işaretli kalır.
+        if "must_change_password" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
         c.commit()
     migrate_library()
     with _lock:
@@ -168,9 +171,26 @@ def bump_session_epoch(user_id: int) -> None:
 
 def set_password(user_id: int, password: str) -> None:
     with _lock:
-        conn().execute("UPDATE users SET password_hash = ? WHERE id = ?",
-                       (security.hash_password(password), user_id))
+        conn().execute(
+            "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
+            (security.hash_password(password), user_id))
         conn().commit()
+
+
+def issue_temp_password(user_id: int) -> str:
+    """"Şifremi unuttum" akışı: kalıcı bir şifre yerine tek seferlik geçici bir şifre üretir.
+
+    Doğrudan giriş yapılabilir bir şifre e-postayla gönderilir; `must_change_password`
+    işaretlenir ki kullanıcı hesabından kalıcı bir şifre belirleyene kadar arayüz onu
+    hatırlatsın. Diğer cihazlardaki eski oturumlar da bununla birlikte düşer."""
+    temp_password = secrets.token_urlsafe(9)
+    with _lock:
+        conn().execute(
+            "UPDATE users SET password_hash = ?, must_change_password = 1,"
+            " session_epoch = session_epoch + 1 WHERE id = ?",
+            (security.hash_password(temp_password), user_id))
+        conn().commit()
+    return temp_password
 
 
 def _seed_admin() -> None:
@@ -406,6 +426,7 @@ def public(user: dict) -> dict:
         "fulltext_allowed": True if is_admin(user) else plan["fulltext"],
         "has_ncbi_key": bool(user.get("ncbi_key_enc")),
         "email_verified": bool(user.get("email_verified_at")),
+        "must_change_password": bool(user.get("must_change_password")),
         "period_start": user["period_start"],
         "created_at": user["created_at"],
     }
