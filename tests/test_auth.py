@@ -117,11 +117,13 @@ def test_temp_password_logs_in_and_flags_must_change(client, outbox):
     assert fresh.get("/api/me").json()["must_change_password"] is False
 
 
-def test_signup_with_existing_account_says_sign_in(client, outbox):
+def test_signup_with_existing_account_stays_vague(client, outbox):
     client.post("/api/auth/signup", json=SIGNUP)
     res = TestClient(appmod.app).post("/api/auth/signup", json=SIGNUP)
     assert res.status_code == 409
-    assert "already registered" in res.json()["detail"]
+    # Mesaj, adresin kayıtlı olduğunu açıkça doğrulamaz (hesap sayımına karşı).
+    detail = res.json()["detail"]
+    assert "try signing in" in detail and "registered" not in detail
 
 
 # --------------------------------------------------------------------- güvenlik

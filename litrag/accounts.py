@@ -143,7 +143,8 @@ def create_user(email: str, password: str, role: str, plan: str = "free",
             )
             conn().commit()
         except sqlite3.IntegrityError:
-            raise ValueError("This account is already registered. Please sign in instead.")
+            raise ValueError("Something went wrong. If you already have an account, "
+                             "please try signing in.")
     return by_id(int(cur.lastrowid))
 
 
