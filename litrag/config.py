@@ -82,12 +82,8 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0").strip() not in ("0", "false", "F
 # Kullanıcıya gönderilen bağlantılarda kullanılan genel adres.
 APP_URL = os.getenv("APP_URL", "http://127.0.0.1:8765").strip().rstrip("/")
 
-# --- İşlemsel e-posta (SMTP konuşan her sağlayıcı çalışır) ---
-SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "").strip()
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_STARTTLS = os.getenv("SMTP_STARTTLS", "1").strip() not in ("0", "false", "False")
+# --- İşlemsel e-posta (Brevo HTTP API; bkz. mailer.py) ---
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "").strip()
 MAIL_FROM = os.getenv("MAIL_FROM", "").strip()
 
 VERIFY_TOKEN_HOURS = int(os.getenv("VERIFY_TOKEN_HOURS", "48"))

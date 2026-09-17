@@ -1,79 +1,62 @@
 """İşlemsel e-posta gönderimi.
 
-Sağlayıcıdan bağımsızdır: SMTP konuşan her servis (Resend, Postmark, SES, Brevo,
-Mailgun, hatta bir kurumsal posta sunucusu) `.env` doldurularak çalışır. Yapılandırma
-yoksa uygulama çökmez, bağlantıyı konsola yazar — geliştirirken akışı e-posta kurmadan
-denemek için.
+Brevo'nun HTTP API'si üzerinden gönderilir (SMTP değil): birçok host (Render dahil)
+container'lardan giden ham SMTP bağlantılarını (port 587/465) engelliyor ya da
+IPv6 route eksikliğinden "Network is unreachable" hatası veriyor. HTTPS üzerinden
+çalışan bir API bu kısıtlamadan etkilenmez. Yapılandırma yoksa uygulama çökmez,
+bağlantıyı konsola yazar — geliştirirken akışı e-posta kurmadan denemek için.
 
-Gönderim ana isteği bloke etmez: arka planda bir iş parçacığında yapılır, çünkü SMTP
-el sıkışması saniyeler sürebilir ve kullanıcı "şifremi unuttum" düğmesine bastığında
-o kadar beklememelidir.
+Gönderim ana isteği bloke etmez: arka planda bir iş parçacığında yapılır.
 """
 from __future__ import annotations
 
-import smtplib
 import threading
-from email.message import EmailMessage
 
-from .config import (APP_NAME, APP_URL, MAIL_FROM, SMTP_HOST, SMTP_PASSWORD, SMTP_PORT,
-                     SMTP_STARTTLS, SMTP_USER)
+import httpx
+
+from .config import APP_NAME, APP_URL, BREVO_API_KEY, MAIL_FROM
+
+BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 
 
 def configured() -> bool:
-    return bool(SMTP_HOST and MAIL_FROM)
+    return bool(BREVO_API_KEY and MAIL_FROM)
 
 
-def _deliver(message: EmailMessage) -> None:
+def _deliver(to: str, subject: str, body: str) -> None:
     try:
-        if SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20)
-        else:
-            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
-            if SMTP_STARTTLS:
-                server.starttls()
-        with server:
-            if SMTP_USER:
-                server.login(SMTP_USER, SMTP_PASSWORD)
-            server.send_message(message)
+        r = httpx.post(
+            BREVO_ENDPOINT,
+            timeout=20,
+            headers={
+                "api-key": BREVO_API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "sender": {"email": MAIL_FROM, "name": APP_NAME},
+                "to": [{"email": to}],
+                "subject": subject,
+                "textContent": body,
+            },
+        )
+        if r.status_code >= 400:
+            print(f"[mail] delivery failed to {to}: {r.status_code} {r.text}")
     except Exception as exc:                     # gönderim hatası akışı durdurmaz
-        print(f"[mail] delivery failed to {message['To']}: {exc}")
+        print(f"[mail] delivery failed to {to}: {exc}")
 
 
 def send(to: str, subject: str, body: str) -> None:
     """E-postayı arka planda yollar. Yapılandırma yoksa konsola yazar."""
     if not configured():
-        print(f"\n[mail] SMTP yapılandırılmamış, e-posta gönderilmedi.\n"
+        print(f"\n[mail] Brevo yapılandırılmamış, e-posta gönderilmedi.\n"
               f"       Alıcı : {to}\n       Konu  : {subject}\n"
               f"       İçerik:\n{body}\n")
         return
-
-    message = EmailMessage()
-    message["From"] = f"{APP_NAME} <{MAIL_FROM}>"
-    message["To"] = to
-    message["Subject"] = subject
-    message.set_content(body)
-    threading.Thread(target=_deliver, args=(message,), daemon=True).start()
+    threading.Thread(target=_deliver, args=(to, subject, body), daemon=True).start()
 
 
 # --------------------------------------------------------------------- şablonlar
-def send_password_reset(to: str, token: str, valid_minutes: int) -> None:
-    link = f"{APP_URL}/sifre-sifirla?token={token}"
-    send(to, f"{APP_NAME} şifre sıfırlama",
-         f"""Merhaba,
-
-{APP_NAME} hesabınızın şifresini sıfırlamak için aşağıdaki bağlantıyı açın:
-
-{link}
-
-Bağlantı {valid_minutes} dakika geçerlidir ve yalnızca bir kez kullanılabilir.
-
-Bu isteği siz yapmadıysanız hiçbir şey yapmanıza gerek yok: şifreniz değişmez.
-Ancak hesabınıza başkasının erişmeye çalıştığını düşünüyorsanız şifrenizi
-değiştirmenizi öneririz.
-
-{APP_NAME}""")
-
-
 def send_welcome(to: str) -> None:
     send(to, f"{APP_NAME}'e hoş geldiniz",
          f"""Merhaba,

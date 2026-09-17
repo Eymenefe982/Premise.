@@ -17,7 +17,7 @@ os.environ["LITRAG_DB"] = str(_TMP / "test.db")
 os.environ["CACHE_ENABLED"] = "0"
 os.environ["ADMIN_EMAIL"] = ""            # testlerde yönetici hesabı tohumlanmasın
 os.environ["ADMIN_PASSWORD"] = ""
-os.environ["SMTP_HOST"] = ""              # e-posta gönderimi kapalı, konsola düşer
+os.environ["BREVO_API_KEY"] = ""          # e-posta gönderimi kapalı, konsola düşer
 os.environ.setdefault("GEMINI_API_KEYS", "")
 os.environ.setdefault("GROQ_API_KEY", "")
 
