@@ -94,6 +94,17 @@
       kalıcı bir şifre belirleyin.</p>
   </div>
 
+  <!-- e-posta doğrulanmamış -->
+  <div class="card" id="verify-email" hidden>
+    <h2>E-posta adresinizi doğrulayın</h2>
+    <p class="sub">Arama yapabilmek için e-posta adresinize gönderdiğimiz bağlantıya
+      tıklamanız gerekiyor. Gelmediyse gereksiz/spam klasörünü kontrol edin.</p>
+    <div class="inline">
+      <button class="btn" id="resend-verify">Doğrulama mailini yeniden gönder</button>
+    </div>
+    <div class="flag" id="verify-msg" hidden></div>
+  </div>
+
   <!-- NCBI anahtarı -->
   <div class="card">
     <h2>NCBI arama anahtarı <span class="pill" id="key-state">yok</span></h2>
@@ -183,6 +194,10 @@
       $('pw-new').focus();
     }
 
+    if (!me.email_verified && !me.is_admin){
+      $('verify-email').hidden = false;
+    }
+
     if (me.is_admin){
       $('credits-left').textContent = '∞';
       $('credits-total').textContent = 'sınırsız';
@@ -226,6 +241,20 @@
       const d = await res.json().catch(() => ({}));
       flag($('key-msg'), typeof d.detail === 'string' ? d.detail : 'Anahtar kaydedilemedi.', false);
     }
+  });
+
+  $('resend-verify').addEventListener('click', async () => {
+    const btn = $('resend-verify');
+    btn.disabled = true;
+    const res = await fetch('/api/auth/resend-verification', { method: 'POST' });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok){
+      flag($('verify-msg'), d.already_verified ? 'E-postanız zaten doğrulanmış.'
+           : 'Doğrulama maili gönderildi, gelen kutunuzu kontrol edin.', true);
+    } else {
+      flag($('verify-msg'), typeof d.detail === 'string' ? d.detail : 'Gönderilemedi.', false);
+    }
+    btn.disabled = false;
   });
 
   $('skip-key').addEventListener('click', () => {
