@@ -13,12 +13,10 @@ APP_NAME = "Premise"
 NCBI_EMAIL = os.getenv("NCBI_EMAIL", "").strip()
 NCBI_API_KEY = os.getenv("NCBI_API_KEY", "").strip()
 GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEYS", "").split(",") if k.strip()]
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 
 # --- Model isimleri (.env ile değiştirilebilir) ---
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
 GEMINI_FAST_MODEL = os.getenv("GEMINI_FAST_MODEL", GEMINI_MODEL).strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 
 # --- Ağ ---
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "40"))

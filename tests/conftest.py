@@ -19,7 +19,6 @@ os.environ["ADMIN_EMAIL"] = ""            # testlerde yönetici hesabı tohumlan
 os.environ["ADMIN_PASSWORD"] = ""
 os.environ["BREVO_API_KEY"] = ""          # e-posta gönderimi kapalı, konsola düşer
 os.environ.setdefault("GEMINI_API_KEYS", "")
-os.environ.setdefault("GROQ_API_KEY", "")
 
 
 import pytest

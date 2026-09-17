@@ -1,4 +1,4 @@
-"""Dil modeli katmanı: Gemini anahtar havuzu + Groq yedeği, çeviri ve sentez."""
+"""Dil modeli katmanı: Gemini anahtar havuzu, çeviri ve sentez."""
 from __future__ import annotations
 
 import json
@@ -11,9 +11,7 @@ warnings.filterwarnings("ignore", message=".*google.generativeai.*")
 
 import google.generativeai as genai  # noqa: E402
 
-from .config import (GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL, GROQ_API_KEY,
-                     GROQ_MODEL)
-from .http import client
+from .config import GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL
 
 _key_index = 0
 if GEMINI_API_KEYS:
@@ -39,67 +37,12 @@ def _is_quota_error(exc: Exception) -> bool:
     return any(t in msg for t in ("429", "quota", "exhausted", "rate limit", "resource_exhausted"))
 
 
-# Yedek sağlayıcıda model adları zamanla değişir; sunucudan doğrulayıp seçeriz.
-_GROQ_PREFERENCE = ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b",
-                    "groq/compound")
-_groq_model: str | None = None
-
-
-def _groq_headers() -> dict:
-    return {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-
-
-def _pick_groq_model() -> str:
-    """Yapılandırılan model yoksa sunucunun sunduğu sohbet modellerinden birini seçer."""
-    global _groq_model
-    if _groq_model:
-        return _groq_model
-
-    _groq_model = GROQ_MODEL
-    try:
-        r = client().get("https://api.groq.com/openai/v1/models",
-                         headers=_groq_headers(), timeout=20)
-        available = {m["id"] for m in r.json().get("data", [])} if r.status_code == 200 else set()
-    except Exception:
-        available = set()
-
-    if available and GROQ_MODEL not in available:
-        for candidate in _GROQ_PREFERENCE:
-            if candidate in available:
-                print(f"[llm] Groq model '{GROQ_MODEL}' unavailable, using '{candidate}'")
-                _groq_model = candidate
-                break
-    return _groq_model
-
-
-def _groq(prompt: str, system: str = "", json_mode: bool = False) -> str:
-    """Gemini tükendiğinde devreye giren yedek sağlayıcı."""
-    if not GROQ_API_KEY:
-        raise LLMError("No Groq key configured, the fallback provider is unavailable.")
-
-    messages = ([{"role": "system", "content": system}] if system else []) + \
-               [{"role": "user", "content": prompt}]
-    payload = {"model": _pick_groq_model(), "messages": messages, "temperature": 0.2}
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
-
-    r = client().post("https://api.groq.com/openai/v1/chat/completions",
-                      headers=_groq_headers(), json=payload, timeout=180)
-    if r.status_code == 404 and "model" in r.text.lower():
-        global _groq_model
-        _groq_model = None                       # model kaybolmuş, bir kez yeniden seç
-        payload["model"] = _pick_groq_model()
-        r = client().post("https://api.groq.com/openai/v1/chat/completions",
-                          headers=_groq_headers(), json=payload, timeout=180)
-    if r.status_code != 200:
-        raise LLMError(f"Groq error {r.status_code}: {r.text[:200]}")
-    return r.json()["choices"][0]["message"]["content"]
-
-
-def generate(prompt: str, system: str = "", json_mode: bool = False, fast: bool = False) -> str:
-    """Gemini ile üretir; kota biterse anahtar değiştirir, hepsi biterse Groq'a düşer."""
-    model_name = GEMINI_FAST_MODEL if fast else GEMINI_MODEL
-    config = {"response_mime_type": "application/json"} if json_mode else {}
+def _generate_with_model(model_name: str, prompt: str, system: str, config: dict) -> str | None:
+    """Verilen modeli, havuzdaki her anahtarla kota bitene kadar dener."""
+    global _key_index
+    _key_index = 0
+    if GEMINI_API_KEYS:
+        genai.configure(api_key=GEMINI_API_KEYS[0])
 
     while GEMINI_API_KEYS:
         try:
@@ -114,11 +57,29 @@ def generate(prompt: str, system: str = "", json_mode: bool = False, fast: bool 
                     time.sleep(1.2)
                     continue
                 except LLMError:
-                    break
-            print(f"[llm] Gemini error: {exc}")
-            break
+                    return None
+            print(f"[llm] Gemini error ({model_name}): {exc}")
+            return None
+    return None
 
-    return _groq(prompt, system, json_mode)
+
+def generate(prompt: str, system: str = "", json_mode: bool = False, fast: bool = False) -> str:
+    """Gemini ile üretir; kota biterse anahtar değiştirir, tüm anahtarlar biterse
+    (ana model kullanılıyorsa) hızlı modele düşer."""
+    model_name = GEMINI_FAST_MODEL if fast else GEMINI_MODEL
+    config = {"response_mime_type": "application/json"} if json_mode else {}
+
+    result = _generate_with_model(model_name, prompt, system, config)
+    if result is not None:
+        return result
+
+    if model_name != GEMINI_FAST_MODEL:
+        print(f"[llm] '{model_name}' exhausted, falling back to fast model '{GEMINI_FAST_MODEL}'")
+        result = _generate_with_model(GEMINI_FAST_MODEL, prompt, system, config)
+        if result is not None:
+            return result
+
+    raise LLMError("All Gemini keys/models are out of quota.")
 
 
 # --------------------------------------------------------------------------- çeviri

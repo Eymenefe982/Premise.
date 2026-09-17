@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 
 from litrag import accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
-                           GEMINI_API_KEYS, GEMINI_MODEL, GROQ_API_KEY, NCBI_API_KEY,
+                           GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
                            TRUST_PROXY_HEADERS, VERIFY_TOKEN_HOURS, WEB_DIR)
 from litrag.pdf import to_pdf
@@ -498,7 +498,7 @@ async def admin_status(_: dict = Depends(require_admin)) -> dict:
     return {
         "gemini_keys": len(GEMINI_API_KEYS),
         "gemini_model": GEMINI_MODEL,
-        "groq_fallback": bool(GROQ_API_KEY),
+        "gemini_fast_model": GEMINI_FAST_MODEL,
         "ncbi_email": bool(NCBI_EMAIL),
         "ncbi_api_key": bool(NCBI_API_KEY),
         "stats": store.stats(),
