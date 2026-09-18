@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premise — Privacy policy</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/img/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
+<link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+<style>
+  .legal-wrap{ max-width:760px; margin:0 auto; padding:48px 20px 80px; }
+  .legal-wrap h1{ font-size:28px; margin:0 0 6px; }
+  .legal-wrap .updated{ color:var(--muted); font-size:13px; margin:0 0 32px; }
+  .legal-wrap h2{ font-size:18px; margin:34px 0 10px; }
+  .legal-wrap p, .legal-wrap li{ color:var(--ink-2); font-size:14.5px; line-height:1.7; }
+  .legal-wrap ul{ margin:8px 0; padding-left:20px; }
+  .legal-wrap b{ color:var(--ink); }
+  .legal-wrap table{ width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px; }
+  .legal-wrap th, .legal-wrap td{ text-align:left; padding:9px 10px; border:1px solid var(--border); vertical-align:top; }
+  .legal-wrap th{ background:var(--surface-2); color:var(--ink); }
+  .legal-wrap td{ color:var(--ink-2); }
+  .back-link{ display:inline-block; margin-bottom:18px; font-size:13.5px; }
+  .callout{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:14px 16px; margin:14px 0; font-size:14px; color:var(--ink-2); line-height:1.6;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">Premise<span>.</span></span>
+  </div>
+</header>
+
+<main class="legal-wrap">
+  <a class="back-link" href="/">← Back to Premise</a>
+  <h1>Privacy policy</h1>
+  <p class="updated">Last updated: 18 September 2026</p>
+
+  <p>
+    Premise is a literature search tool for clinicians and researchers. Because the questions
+    you ask can reveal clinical context about a patient, we treat everything you type into the
+    search box as sensitive. This page explains what we collect, where it goes, and who can see it.
+  </p>
+
+  <h2>1. Your search content is private to your account</h2>
+  <p>
+    Every search, its result, and your library are stored under your account only. There is no
+    admin screen, support tool, or API endpoint in Premise that lets anyone — including the
+    people who run this service — open another account's questions, results, or library from
+    inside the application. Administrative access is limited to account status (plan, credit
+    balance, email verification) and never extends to search content.
+  </p>
+  <div class="callout">
+    <b>What this does not cover:</b> whoever operates the underlying database server (currently
+    Neon/Postgres) retains the technical ability to query it directly, the way any database
+    administrator can. Premise does not build a screen or tool for that, and does not use search
+    content for any purpose beyond producing your answer. If you need data fully unreadable even
+    at the infrastructure level, do not include patient-identifying details in your questions —
+    ask about the clinical scenario in de-identified form.
+  </div>
+
+  <h2>2. Who else your question is sent to</h2>
+  <p>To produce an answer, parts of your question and the matched literature are sent to:</p>
+  <table>
+    <tr><th>Recipient</th><th>What it receives</th><th>Why</th></tr>
+    <tr>
+      <td>Google (Gemini API)</td>
+      <td>Your question (translated), and abstracts/excerpts of the matched articles</td>
+      <td>Generates the summarised answer</td>
+    </tr>
+    <tr>
+      <td>PubMed / PubMed Central / Europe PMC (NCBI and partners)</td>
+      <td>Search terms derived from your question</td>
+      <td>Finds matching articles — these are public literature databases, not your identity</td>
+    </tr>
+    <tr>
+      <td>Brevo (email delivery)</td>
+      <td>Your email address, for account emails only (welcome, verification, password reset)</td>
+      <td>Delivers transactional email — never your search content</td>
+    </tr>
+  </table>
+  <p>
+    None of these recipients receive your name, and your account email is never attached to the
+    text sent to Google or to PubMed/Europe PMC — only to Brevo, solely to deliver account email.
+  </p>
+
+  <h2>3. Where data is stored</h2>
+  <p>
+    Accounts, credit balances, search history and library entries are stored in a managed
+    Postgres database (Neon). Prior sessions (JWT refresh tokens) are stored hashed. Passwords
+    are stored as salted hashes, never in plain text.
+  </p>
+
+  <h2>4. Special-category data and cross-border transfer</h2>
+  <p>
+    Clinical questions can qualify as special-category personal data. Sending them to Google's
+    Gemini API and storing them on Neon means data leaves Türkiye during processing. We ask for
+    your explicit, informed consent to this at signup — see the consent checkbox on the sign-up
+    form. You can withdraw consent at any time by closing your account; see section 6.
+  </p>
+
+  <h2>5. What we do not do</h2>
+  <ul>
+    <li>We do not sell or share your data with advertisers or data brokers.</li>
+    <li>We do not use your searches to train models.</li>
+    <li>We do not attach your identity to the text sent for literature search or summarisation.</li>
+  </ul>
+
+  <h2>6. Your rights</h2>
+  <p>
+    You can request a copy of your data, ask us to delete your account and associated searches,
+    or withdraw consent at any time by contacting us at the address below. Deleting your account
+    removes your stored searches and library from the database.
+  </p>
+
+  <h2>7. Not a clinical decision tool</h2>
+  <p>
+    Premise summarises published literature. It does not diagnose, does not recommend treatment,
+    and is not a substitute for clinical judgement. Every generated summary must be verified
+    against the cited articles before it is used in a clinical decision. Do not enter identifying
+    patient information (name, MRN, exact birth date, etc.) into the search box — describe the
+    clinical question in de-identified form.
+  </p>
+
+  <h2>8. Contact</h2>
+  <p>
+    Questions about this policy or a data request: reach us through your account page, or at the
+    contact address shown there.
+  </p>
+</main>
+
+</body>
+</html>

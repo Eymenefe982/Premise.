@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 
 from litrag import accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
-                           DB_IS_EPHEMERAL, DB_PATH,
+                           DATABASE_URL, DB_IS_EPHEMERAL, DB_PATH,
                            GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
                            TRUST_PROXY_HEADERS, VERIFY_TOKEN_HOURS, WEB_DIR)
@@ -43,6 +43,11 @@ async def _lifespan(app: FastAPI):
     # uvicorn'un `app:app` ile doğrudan başlatıldığı ortamlarda (ör. Render) `main()`
     # hiç çalışmaz; şema kurulumu bu yüzden burada, ASGI lifespan'ında yapılır.
     accounts.init()
+    # Sunucu yeniden başladıysa yarıda kalan aramaların rezerve kredisi iade edilir.
+    accounts.release_stale_holds()
+    if DATABASE_URL and not os.getenv("RENDER"):
+        print("  ! Yerel çalışma DATABASE_URL üzerinden uzak Postgres'e bağlı: "
+              "hesaplar ve krediler CANLI veritabanına yazılır.")
     if DB_IS_EPHEMERAL:
         print("  !! VERİTABANI GEÇİCİ DİSKTE: " + str(DB_PATH))
         print("  !! Bu kapsayıcı yeniden başladığında hesaplar, geçmiş, krediler ve")
@@ -135,10 +140,18 @@ def _user_from_cookie(request: Request, cookie: str, kind: str) -> dict | None:
     Kuşak eşleşmezse jeton bir şifre değişiminden önce verilmiş demektir; süresi
     dolmamış olsa bile kabul edilmez."""
     token = request.cookies.get(cookie, "")
-    claim = security.read_token(accounts.jwt_secret(), token, kind) if token else None
-    if claim is None:
+    claims = security.read_claims(accounts.jwt_secret(), token, kind) if token else None
+    if claims is None:
         return None
-    user_id, epoch = claim
+    try:
+        user_id, epoch = int(claims["sub"]), int(claims.get("gen", 0))
+    except (KeyError, TypeError, ValueError):
+        return None
+    # Yalnızca yenileme jetonu için bakılır: çıkışta geri alınan budur (30 gün geçerli).
+    # Erişim jetonu en fazla ACCESS_TOKEN_HOURS yaşar ve her istekte ek sorgu gerekmez.
+    if kind == "refresh" and claims.get("jti") \
+            and accounts.is_session_token_revoked(str(claims["jti"])):
+        return None
     user = accounts.by_id(user_id)
     if user is None or int(user.get("session_epoch") or 0) != epoch:
         return None
@@ -161,15 +174,22 @@ def require_admin(user: dict = Depends(current_user)) -> dict:
 
 def _client_key(request: Request) -> str:
     """İstemcinin IP'si. Vekil arkasında vekilin kendi adresi herkes için aynıdır;
-    o yüzden vekilin koyduğu başlıklar okunur (bkz. config.TRUST_PROXY_HEADERS)."""
+    o yüzden vekilin koyduğu başlıklar okunur (bkz. config.TRUST_PROXY_HEADERS).
+
+    Önce Cloudflare'in kenarda yazdığı başlıklar okunur: istemcinin gönderdiği değeri
+    ezerler. X-Forwarded-For'un ise İLK elemanı istemcinin kendi yazdığı değerdir
+    (Render başlığı temizlemez, yalnızca sonuna ekler); oradan okumak IP başına bütün
+    hız sınırlarını sahte bir başlıkla aşılabilir kılıyordu. Güvenilir olan, en yakın
+    vekilin eklediği SON elemandır."""
     if TRUST_PROXY_HEADERS:
-        for name in ("true-client-ip", "cf-connecting-ip"):
+        for name in ("cf-connecting-ip", "true-client-ip"):
             value = request.headers.get(name, "").strip()
             if value:
                 return value
-        forwarded = request.headers.get("x-forwarded-for", "")
+        forwarded = [part.strip() for part in
+                     request.headers.get("x-forwarded-for", "").split(",") if part.strip()]
         if forwarded:
-            return forwarded.split(",")[0].strip()
+            return forwarded[-1]
     return request.client.host if request.client else "unknown"
 
 
@@ -193,8 +213,15 @@ async def login(body: LoginIn, request: Request, response: Response) -> dict:
     email = str(body.email).lower()
     key = f"{_client_key(request)}:{email}"
     if not security.login_throttle.allow(key) or security.login_failures.blocked(email):
+        # Kilitliyken de e-postayla gelen geçici şifre kabul edilir; yoksa başkasının
+        # bilerek tetiklediği kilit, hesap sahibini bir saat dışarıda bırakıyordu.
+        # (bkz. accounts.authenticate_temp_only)
+        rescued = accounts.authenticate_temp_only(email, body.password)
+        if rescued is not None:
+            return _login_response(response, rescued)
         raise HTTPException(
-            429, "Too many failed login attempts. Please wait a moment.",
+            429, "Too many failed login attempts. Please wait a moment, or use "
+                 "\"Forgot password?\" to get a temporary password by email.",
             headers={"Retry-After": str(max(security.login_throttle.retry_after(key),
                                             security.login_failures.retry_after(email)))})
     user = accounts.authenticate(email, body.password)
@@ -213,7 +240,17 @@ async def refresh(request: Request, response: Response) -> dict:
 
 
 @app.post("/api/auth/logout")
-async def logout(response: Response) -> dict:
+async def logout(request: Request, response: Response) -> dict:
+    # Çerezi silmek yetmez: çalınmış bir kopya 30 gün geçerli kalırdı. Bu oturumun
+    # yenileme jetonu sunucuda geri alınır (diğer cihazlardaki oturumlar etkilenmez).
+    token = request.cookies.get(REFRESH_COOKIE, "")
+    claims = security.read_claims(accounts.jwt_secret(), token, "refresh") if token else None
+    if claims and claims.get("jti"):
+        try:
+            accounts.revoke_session_token(int(claims["sub"]), str(claims["jti"]),
+                                          int(claims["exp"]))
+        except (KeyError, TypeError, ValueError):
+            pass
     for name in (ACCESS_COOKIE, REFRESH_COOKIE):
         response.delete_cookie(name, path="/")
     return {"ok": True}
@@ -318,16 +355,16 @@ def _worker(job_id: str, req: SearchRequest, user_id: int, reserved: int) -> Non
             # (bkz. meter.py); rezerve edilen tavanla arasındaki fark iade edilir.
             charged = int(result.get("usage", {}).get("credits", 0))
         result["credits_charged"] = charged
-        accounts.settle(user_id, reserved, charged, "search", report_id)
+        accounts.settle(user_id, reserved, charged, "search", report_id, hold_id=job_id)
 
         user = accounts.by_id(user_id)
         result["credits_left"] = accounts.balance(user) if user else None
         events.put({"type": "done", "result": result})
     except SearchCancelled:                        # iptal edilen tarama ücretlendirilmez
-        accounts.settle(user_id, reserved, 0, "search cancelled")
+        accounts.settle(user_id, reserved, 0, "search cancelled", hold_id=job_id)
         events.put({"type": "cancelled"})
     except Exception as exc:
-        accounts.settle(user_id, reserved, 0, "search failed")
+        accounts.settle(user_id, reserved, 0, "search failed", hold_id=job_id)
         # Ham istisna metni kullanıcıya gönderilmez: sağlayıcı hataları istek URL'sini
         # (ve içindeki API anahtarını) ya da iç ayrıntıları taşıyabilir.
         if isinstance(exc, ValueError):
@@ -353,6 +390,11 @@ async def start_search(body: SearchIn, request: Request,
         raise HTTPException(403, "Please verify your email address before searching. "
                                  "You can request a new verification link from your "
                                  "account page.")
+    # Geçici şifre e-postada düz metin durur; kalıcı şifre belirlenmeden hesap onunla
+    # kullanılmaya devam etmesin. Yalnız arama (maliyetli adım) kapanır, sayfalar açık.
+    if user.get("must_change_password"):
+        raise HTTPException(403, "Please set a permanent password on your account page "
+                                 "before searching.")
 
     # Akışı hiç okunmamış bitmiş işler bellekte birikmesin.
     now = time.monotonic()
@@ -378,14 +420,17 @@ async def start_search(body: SearchIn, request: Request,
 
     # Kredi aramaya başlamadan bloke edilir; gerçek maliyet belli olunca fark iade
     # edilir. Okuyup sonra düşmek, eşzamanlı aramalarda bakiyenin aşılmasına izin verirdi.
+    # Rezervasyon iş kimliğiyle kaydedilir; sonucu hiç gelmeyecek eski rezervasyonlar
+    # (sunucu yeniden başladıysa) önce iade edilir, kullanıcı bakiyesini geri görür.
+    job_id = uuid.uuid4().hex[:12]
+    accounts.release_stale_holds()
     needed = accounts.max_cost_of(req)
-    if not accounts.reserve(user["id"], needed):
+    if not accounts.reserve(user["id"], needed, hold_id=job_id):
         left = accounts.balance(user)
         raise HTTPException(402, f"This search needs {needed} credits, you have "
                                  f"{left} left. You can upgrade your plan or "
                                  f"buy extra credits.")
 
-    job_id = uuid.uuid4().hex[:12]
     _jobs[job_id] = {"events": queue.Queue(), "user_id": user["id"], "finished_at": None}
     threading.Thread(target=_worker, args=(job_id, req, user["id"], needed),
                      daemon=True).start()
@@ -573,6 +618,11 @@ async def reset_page() -> FileResponse:
 @app.get("/eposta-dogrula")
 async def verify_page() -> FileResponse:
     return _page("verify.html")
+
+
+@app.get("/gizlilik")
+async def privacy_page() -> FileResponse:
+    return _page("gizlilik.html")
 
 
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")

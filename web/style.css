@@ -121,6 +121,14 @@ html[data-theme="dark"] .flag.err { background: #2a1513; }
 .hero h1 { margin: 0 0 14px; font-size: 34px; line-height: 1.2; font-weight: 680; }
 .hero-sub { max-width: 640px; margin: 0 auto 30px; color: var(--muted); font-size: 15px; }
 
+.privacy-banner {
+  max-width: 640px; margin: 0 auto 22px; text-align: left;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 12px 15px; font-size: 13px; line-height: 1.55; color: var(--ink-2);
+}
+.privacy-banner b { color: var(--ink); }
+.privacy-banner a { color: var(--accent); }
+
 .search-card {
   background: var(--surface);
   border: 1px solid var(--border);
