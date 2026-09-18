@@ -28,6 +28,8 @@ class SignupIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     role: Literal["physician", "student"]
     kvkk_consent: bool
+    # Görünmez bot tuzağı alanı (bkz. auth.html); insan kullanıcıda her zaman boştur.
+    website: str = Field(default="", max_length=200)
 
     @field_validator("email", mode="before")
     @classmethod

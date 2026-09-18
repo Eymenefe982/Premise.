@@ -5,11 +5,14 @@ motor farkını bilmeden `conn()` üzerinden çalışır.
 """
 from __future__ import annotations
 
+import logging
 import json
 import threading
 from datetime import datetime
 
 from . import db
+
+log = logging.getLogger("premise.store")
 
 # Yeniden girilebilir: `save_report` ve `cache.put` bu kilidi tutarken `conn()`
 # çağırır; ilk çağrıda `conn()` şemayı kurmak için aynı kilidi ister. Düz Lock'la
@@ -103,7 +106,7 @@ def migrate_library() -> None:
             ALTER TABLE library_new RENAME TO library;
         """)
         c.commit()
-    print("  [store] kütüphane tekillik kısıtı kullanıcı bazına taşındı")
+    log.info("library uniqueness constraint migrated to per-user")
 
 
 # --------------------------------------------------------------------- geçmiş

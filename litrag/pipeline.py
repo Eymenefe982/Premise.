@@ -1,6 +1,7 @@
 """Arama hattı: çeviri -> çok kaynaklı tarama -> birleştirme -> triyaj -> tam metin -> sentez."""
 from __future__ import annotations
 
+import logging
 import concurrent.futures
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -16,6 +17,8 @@ from .llm import (check_claims, short_answer_citations, synthesize, translate_qu
                   triage, validate_citations)
 from .models import Article, ClinicalResource
 from .sources import clinical, europepmc, openaccess, pmc, pubmed
+
+log = logging.getLogger("premise.pipeline")
 
 
 @dataclass
@@ -210,7 +213,7 @@ def _run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
             try:
                 results[name] = future.result()
             except Exception as exc:
-                print(f"[pipeline] {name} failed: {exc}")
+                log.warning(f"{name} failed: {exc}")
                 results[name] = []
 
     article_batches = [v for k, v in results.items()
@@ -264,7 +267,7 @@ def _run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
                 try:
                     wide[name] = future.result()
                 except Exception as exc:
-                    print(f"[pipeline] {name} failed: {exc}")
+                    log.warning(f"{name} failed: {exc}")
                     wide[name] = []
 
         combined = _merge(article_batches + list(wide.values()))
@@ -364,7 +367,7 @@ def _run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
                 try:
                     stats_count, dropped_findings = stats_job.result()
                 except Exception as exc:
-                    print(f"[pipeline] numeric extraction failed: {exc}")
+                    log.warning(f"numeric extraction failed: {exc}")
             report = synth_job.result()
 
         # 8) Doğrulama: önce uydurma PMID, sonra iddianın kaynakta gerçekten yazıp yazmadığı

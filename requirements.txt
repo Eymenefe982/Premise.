@@ -7,10 +7,10 @@ cryptography
 python-dotenv
 httpx
 google-generativeai
-groq
 reportlab
 python-docx
 biopython
 pytest
 email-validator
 psycopg[binary]
+defusedxml

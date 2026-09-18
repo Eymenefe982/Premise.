@@ -10,13 +10,17 @@ Gönderim ana isteği bloke etmez: arka planda bir iş parçacığında yapılı
 """
 from __future__ import annotations
 
+import logging
+import os
 import threading
 
 import httpx
 
 from .config import APP_NAME, APP_URL, BREVO_API_KEY, MAIL_FROM
+from .logging_setup import mask_email
 
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
+log = logging.getLogger("premise.mail")
 
 
 def configured() -> bool:
@@ -41,14 +45,20 @@ def _deliver(to: str, subject: str, body: str) -> None:
             },
         )
         if r.status_code >= 400:
-            print(f"[mail] delivery failed to {to}: {r.status_code} {r.text}")
+            log.error("delivery failed to %s: %s %s", mask_email(to), r.status_code, r.text)
     except Exception as exc:                     # gönderim hatası akışı durdurmaz
-        print(f"[mail] delivery failed to {to}: {exc}")
+        log.error("delivery failed to %s: %s", mask_email(to), exc)
 
 
 def send(to: str, subject: str, body: str) -> None:
     """Sends the email in the background. Logs to console if not configured."""
     if not configured():
+        # Gövde geçici şifre ve doğrulama bağlantısı taşır: canlıda günlüğe
+        # yazılırsa log panosunu gören herkes o hesaba girebilir.
+        if os.getenv("RENDER"):
+            log.error("Brevo is not configured, email to %s not sent: %s",
+                      mask_email(to), subject)
+            return
         print(f"\n[mail] Brevo is not configured, email not sent.\n"
               f"       To      : {to}\n       Subject : {subject}\n"
               f"       Body:\n{body}\n")

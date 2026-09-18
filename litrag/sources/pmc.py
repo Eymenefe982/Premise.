@@ -4,6 +4,9 @@ from __future__ import annotations
 import re
 from xml.etree import ElementTree as ET
 
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import fromstring as safe_fromstring
+
 from ..config import FULLTEXT_CHAR_LIMIT
 from ..http import get_text
 
@@ -28,9 +31,10 @@ def fetch_fulltext(pmcid: str, char_limit: int = FULLTEXT_CHAR_LIMIT) -> str:
     xml = get_text(EPMC_FULLTEXT.format(pmcid=pmcid))
     if not xml or "<article" not in xml:
         return ""
+    # Dış kaynaktan gelen XML: varlık genişletme bombalarına karşı defusedxml.
     try:
-        root = ET.fromstring(xml.encode("utf-8"))
-    except ET.ParseError:
+        root = safe_fromstring(xml.encode("utf-8"))
+    except (ET.ParseError, DefusedXmlException):
         return ""
 
     body = root.find(".//body")

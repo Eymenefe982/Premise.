@@ -6,11 +6,14 @@ modele verilen kaynak metinde birebir aranır. Bulunamayan bulgu raporlanmaz.
 """
 from __future__ import annotations
 
+import logging
 import json
 import re
 
 from . import modes
 from .llm import generate
+
+log = logging.getLogger("premise.extract")
 
 EXTRACT_SYSTEM = """You extract quantitative results from biomedical article texts.
 
@@ -250,7 +253,7 @@ def extract_findings(articles: list, fulltexts: dict[str, str] | None = None,
             raw = generate(_build_prompt(batch, fulltexts), system=EXTRACT_SYSTEM,
                            json_mode=True, stage="extract")
         except Exception as exc:
-            print(f"[extract] numeric extraction failed: {exc}")
+            log.warning(f"numeric extraction failed: {exc}")
             continue
 
         data = _parse_json(raw)
@@ -281,5 +284,5 @@ def extract_findings(articles: list, fulltexts: dict[str, str] | None = None,
                 enriched += 1
 
     if dropped:
-        print(f"[extract] {dropped} finding(s) dropped: not verifiable in the source text")
+        log.warning(f"{dropped} finding(s) dropped: not verifiable in the source text")
     return enriched, dropped

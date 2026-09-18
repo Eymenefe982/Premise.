@@ -122,8 +122,21 @@ TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "1" if os.getenv("RENDER"
 # Tarayıcıdan gelen isteklerde izin verilen kaynaklar (virgülle ayrılır)
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 
-# Canlıda 1 olmalı: oturum çerezi yalnızca HTTPS üzerinden gönderilir.
-COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0").strip() not in ("0", "false", "False")
+# Oturum çerezi yalnızca HTTPS üzerinden gönderilir. Canlıda varsayılan açık:
+# "unutulduğunda güvensiz" bir ayar, er ya da geç unutulur.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "1" if os.getenv("RENDER") else "0"
+                          ).strip() not in ("0", "false", "False")
+
+# HTTP ile gelen istekler HTTPS'e yönlendirilir. Yerelde kapalı (sertifika yok);
+# canlıda açık, çünkü çerez Secure olsa bile ilk HTTP isteği hâlâ dinlenebilir.
+FORCE_HTTPS = os.getenv("FORCE_HTTPS", "1" if os.getenv("RENDER") else "0"
+                        ).strip() not in ("0", "false", "False")
+
+# Çerezsiz, kişiyi tanımlamayan ziyaret sayacı (Plausible veya Umami). İkisi de boşsa
+# hiçbir analitik betiği yüklenmez. Örn. ANALYTICS_SRC=https://plausible.io/js/script.js
+# ANALYTICS_SITE=premise.example.com (Umami için web sitesi kimliği).
+ANALYTICS_SRC = os.getenv("ANALYTICS_SRC", "").strip()
+ANALYTICS_SITE = os.getenv("ANALYTICS_SITE", "").strip()
 
 # Kullanıcıya gönderilen bağlantılarda kullanılan genel adres.
 APP_URL = os.getenv("APP_URL", "http://127.0.0.1:8765").strip().rstrip("/")

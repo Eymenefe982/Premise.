@@ -12,12 +12,16 @@ yerelde SQLite'ta koşmaya devam ediyor.
 """
 from __future__ import annotations
 
+import logging
 import re
 import sqlite3
 import threading
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .config import DATABASE_URL, DB_PATH
+
+log = logging.getLogger("premise.db")
 
 # SQLite'ta "INTEGER PRIMARY KEY" tek başına bile ROWID takma adıdır ve otomatik
 # artar (AUTOINCREMENT eklense de eklenmese de). Postgres'te böyle bir davranış
@@ -28,6 +32,11 @@ _AUTOINC_RE = re.compile(r"INTEGER\s+PRIMARY\s+KEY(\s+AUTOINCREMENT)?", re.IGNOR
 _INSERT_RE = re.compile(r"^\s*INSERT\s+INTO", re.IGNORECASE)
 _RETURNING_RE = re.compile(r"\bRETURNING\b", re.IGNORECASE)
 _TABLE_RE = re.compile(r"^\s*INSERT\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+
+
+def _is_local(url: str) -> bool:
+    host = urlparse(url).hostname or ""
+    return host in ("", "localhost", "127.0.0.1", "::1")
 
 
 def _table_of(sql: str) -> str:
@@ -90,8 +99,11 @@ class Database:
             # autocommit: Neon boştayken işlemciyi uyutur ve bağlantıyı düşürür;
             # açık kalan bir işlem uyandıktan sonra geçersiz olurdu. Yazma
             # işlemleri zaten tek tek ve `_lock` altında yapılıyor.
+            # Bağlantı dizesi sslmode belirtmiyorsa şifresiz bağlantıya düşülmesin.
+            tls = {} if "sslmode=" in DATABASE_URL or _is_local(DATABASE_URL) \
+                else {"sslmode": "require"}
             self._conn = psycopg.connect(DATABASE_URL, row_factory=dict_row,
-                                         autocommit=True)
+                                         autocommit=True, **tls)
         else:
             Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
@@ -149,7 +161,7 @@ class Database:
                 # Bağlantı hatası önce gelir: yoksa kopmuş bağlantıyı "id sütunu yok"
                 # sanıp yeniden bağlanma hakkını harcardık.
                 if self._is_connection_error(exc) and not reconnected:
-                    print("[db] connection lost, reconnecting")
+                    log.warning("connection lost, reconnecting")
                     reconnected = True
                     self._connect()
                     continue
@@ -190,8 +202,11 @@ class Database:
         """
         if self.backend != "postgres":
             return
+        # Tanımlayıcılar parametre olarak bağlanamaz; bu yüzden biçimleri sınırlanır.
+        if not (table.isidentifier() and column.isidentifier()):
+            raise ValueError(f"invalid identifier: {table}.{column}")
         self.execute(
-            f"SELECT setval(pg_get_serial_sequence('{table}', '{column}'),"
+            f"SELECT setval(pg_get_serial_sequence('{table}', '{column}'),"  # nosec B608
             f" COALESCE((SELECT MAX({column}) FROM {table}), 1))")
 
     def column_names(self, table: str) -> set[str]:

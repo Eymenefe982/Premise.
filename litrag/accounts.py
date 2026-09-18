@@ -1,6 +1,7 @@
 """Kullanıcı hesapları, planlar ve kredi defteri."""
 from __future__ import annotations
 
+import logging
 import secrets
 import threading
 from datetime import datetime, timedelta
@@ -10,7 +11,10 @@ from cryptography.fernet import Fernet
 from . import db, meter, modes, security
 from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET, LOVE_EMAIL, PLANS,
                      SECRET_KEY)
+from .logging_setup import mask_email
 from .store import conn, migrate_library
+
+log = logging.getLogger("premise.accounts")
 
 _lock = threading.Lock()
 PERIOD_DAYS = 30
@@ -284,7 +288,7 @@ def _seed_admin() -> None:
                  "admin", "pro", _now(), _now(), _now()),
             )
         conn().commit()
-    print(f"  [accounts] yönetici hesabı oluşturuldu: {ADMIN_EMAIL}")
+    log.info("admin account created: %s", mask_email(ADMIN_EMAIL))
 
 
 # ------------------------------------------------------------------ NCBI anahtarı
@@ -472,7 +476,7 @@ def release_stale_holds() -> int:
             conn().commit()
         released += 1
     if released:
-        print(f"  [accounts] {released} orphaned credit reservation(s) released")
+        log.info("%d orphaned credit reservation(s) released", released)
     return released
 
 

@@ -1,6 +1,7 @@
 """Dil modeli katmanı: Gemini anahtar havuzu, çeviri ve sentez."""
 from __future__ import annotations
 
+import logging
 import json
 import re
 import threading
@@ -14,6 +15,8 @@ from google.generativeai import client as genai_client  # noqa: E402
 
 from . import modes  # noqa: E402
 from .config import GEMINI_API_KEYS, GEMINI_FAST_MODEL  # noqa: E402
+
+log = logging.getLogger("premise.llm")
 
 # Son çalışan anahtar. Yeni çağrılar buradan başlar; kotası dolan anahtar bir sonrakine
 # devreder ve havuz bir çağrıda en fazla bir kez dolaşılır.
@@ -100,10 +103,10 @@ def _generate_with_model(model_name: str, prompt: str, system: str, config: dict
         except Exception as exc:
             if _is_quota_error(exc):
                 if step + 1 < count:
-                    print(f"[llm] quota hit on Gemini key #{index + 1}, "
+                    log.warning(f"quota hit on Gemini key #{index + 1}, "
                           f"trying key #{(index + 1) % count + 1}")
                 continue
-            print(f"[llm] Gemini error ({model_name}): {exc}")
+            log.warning(f"Gemini error ({model_name}): {exc}")
             return None
         _key_index = index
         return response
@@ -126,7 +129,7 @@ def generate(prompt: str, system: str = "", json_mode: bool = False,
     used_model = cfg.model
 
     if response is None and cfg.model != GEMINI_FAST_MODEL:
-        print(f"[llm] '{cfg.model}' exhausted, falling back to '{GEMINI_FAST_MODEL}'")
+        log.warning(f"'{cfg.model}' exhausted, falling back to '{GEMINI_FAST_MODEL}'")
         used_model = GEMINI_FAST_MODEL
         response = _generate_with_model(GEMINI_FAST_MODEL, prompt, system, config)
 
@@ -174,7 +177,7 @@ def translate_query(query: str, language: str | None = None) -> dict:
             "topic": (data.get("topic") or query)[:80],
         }
     except Exception as exc:
-        print(f"[llm] translation failed: {exc}")
+        log.warning(f"translation failed: {exc}")
         return fallback
 
 
@@ -211,7 +214,7 @@ def triage(question: str, articles: list) -> int:
     try:
         raw = generate(prompt, system=TRIAGE_SYSTEM, json_mode=True, stage="triage")
     except Exception as exc:
-        print(f"[llm] triage failed: {exc}")
+        log.warning(f"triage failed: {exc}")
         return 0
     try:
         data = json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE))
@@ -222,9 +225,9 @@ def triage(question: str, articles: list) -> int:
         items = [{"pmid": pmid, "relevance": int(grade)} for pmid, grade in re.findall(
             r'"pmid"\s*:\s*"([^"]+)"\s*,\s*"relevance"\s*:\s*(\d)', raw)]
         if not items:
-            print("[llm] triage failed: unreadable response")
+            log.warning("triage failed: unreadable response")
             return 0
-        print(f"[llm] triage response was cut off, {len(items)} grade(s) recovered")
+        log.warning(f"triage response was cut off, {len(items)} grade(s) recovered")
         data = {"articles": items}
 
     by_pmid = {(a.pmid or a.pmcid): a for a in articles}
@@ -439,7 +442,7 @@ def check_claims(report: str, articles: list, fulltexts: dict[str, str] | None =
                        system=CLAIM_CHECK_SYSTEM, json_mode=True, stage="claims")
         data = json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE))
     except Exception as exc:
-        print(f"[llm] claim check failed: {exc}")
+        log.warning(f"claim check failed: {exc}")
         return []
 
     flagged = []
@@ -458,7 +461,7 @@ def check_claims(report: str, articles: list, fulltexts: dict[str, str] | None =
             "reason": str(item.get("reason", ""))[:120],
         })
     if flagged:
-        print(f"[llm] {len(flagged)} claim(s) in the short answer flagged by the checker")
+        log.warning(f"{len(flagged)} claim(s) in the short answer flagged by the checker")
     return flagged
 
 

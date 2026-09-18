@@ -7,9 +7,12 @@ maliyetinden hesaplanır.
 """
 from __future__ import annotations
 
+import logging
 import threading
 
 from .config import CREDIT_TRY, MODEL_PRICES, UNKNOWN_MODEL_PRICE, USD_TRY
+
+log = logging.getLogger("premise.meter")
 
 
 def price_of(model: str) -> tuple[float, float]:
@@ -98,7 +101,7 @@ class Meter:
         with self._lock:
             if stage not in self._degraded:
                 self._degraded.append(stage)
-                print(f"[meter] budget ceiling reached, skipping '{stage}' "
+                log.warning(f"budget ceiling reached, skipping '{stage}' "
                       f"({self._total_try:.2f} / {self.ceiling_try:.2f} TL)")
 
     def summary(self) -> dict:

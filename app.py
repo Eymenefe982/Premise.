@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import io
 import json
 import os
 import queue
 import threading
 import time
-import traceback
 import uuid
 import webbrowser
 from contextlib import asynccontextmanager
@@ -22,16 +22,20 @@ from urllib.parse import urlparse
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import (FileResponse, JSONResponse, PlainTextResponse,
-                               StreamingResponse)
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               PlainTextResponse, RedirectResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from litrag import accounts, cache, exporters, mailer, security, store
-from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
-                           DATABASE_URL, DB_IS_EPHEMERAL, DB_PATH,
+from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, ANALYTICS_SITE,
+                           ANALYTICS_SRC, APP_NAME, APP_URL,
+                           COOKIE_SECURE, DATABASE_URL, DB_IS_EPHEMERAL, DB_PATH, FORCE_HTTPS,
                            GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
                            TRUST_PROXY_HEADERS, VERIFY_TOKEN_HOURS, WEB_DIR)
+from litrag.logging_setup import audit, configure as configure_logging, log
 from litrag.pdf import to_pdf
 from litrag.pipeline import SearchCancelled, SearchRequest, run_search
 from litrag.schemas import (ExportIn, ForgotPasswordIn, GrantIn, LibraryIn, LoginIn,
@@ -42,28 +46,32 @@ from litrag.schemas import (ExportIn, ForgotPasswordIn, GrantIn, LibraryIn, Logi
 async def _lifespan(app: FastAPI):
     # uvicorn'un `app:app` ile doğrudan başlatıldığı ortamlarda (ör. Render) `main()`
     # hiç çalışmaz; şema kurulumu bu yüzden burada, ASGI lifespan'ında yapılır.
+    configure_logging()
     accounts.init()
     # Sunucu yeniden başladıysa yarıda kalan aramaların rezerve kredisi iade edilir.
     accounts.release_stale_holds()
     if DATABASE_URL and not os.getenv("RENDER"):
-        print("  ! Yerel çalışma DATABASE_URL üzerinden uzak Postgres'e bağlı: "
-              "hesaplar ve krediler CANLI veritabanına yazılır.")
+        log.warning("Local run is connected to remote Postgres via DATABASE_URL: "
+                    "accounts and credits are written to the LIVE database.")
     if DB_IS_EPHEMERAL:
-        print("  !! VERİTABANI GEÇİCİ DİSKTE: " + str(DB_PATH))
-        print("  !! Bu kapsayıcı yeniden başladığında hesaplar, geçmiş, krediler ve")
-        print("  !! önbellek silinir. Kalıcı disk bağlayıp LITRAG_DB'yi oraya yönlendirin.")
+        log.error("DATABASE IS ON EPHEMERAL DISK (%s): accounts, history, credits and "
+                  "cache are wiped on restart. Set DATABASE_URL.", DB_PATH)
+    if os.getenv("RENDER") and not COOKIE_SECURE:
+        log.error("COOKIE_SECURE is off in production: session cookies travel over HTTP.")
     removed = cache.purge_expired()
     if removed:
-        print(f"  {removed} expired cache entries removed")
+        log.info("%d expired cache entries removed", removed)
     stale = accounts.purge_expired_tokens()
     if stale:
-        print(f"  {stale} expired auth tokens removed")
+        log.info("%d expired auth tokens removed", stale)
     if not mailer.configured():
-        print("  ! SMTP yapılandırılmamış: şifre sıfırlama e-postaları konsola yazılır.")
+        log.warning("Mail is not configured: password reset emails are printed to the console.")
     yield
 
 
 app = FastAPI(title=APP_NAME, docs_url=None, redoc_url=None, lifespan=_lifespan)
+# text/event-stream varsayılan olarak hariçtir: arama akışı tamponlanmaz.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 if ALLOWED_ORIGINS:
     app.add_middleware(
@@ -74,11 +82,19 @@ if ALLOWED_ORIGINS:
         allow_headers=["Content-Type"],
     )
 
-_CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; "
+_ANALYTICS_ORIGIN = ("{0.scheme}://{0.netloc}".format(urlparse(ANALYTICS_SRC))
+                     if ANALYTICS_SRC else "")
+_CSP = (f"default-src 'self'; script-src 'self' 'unsafe-inline' {_ANALYTICS_ORIGIN}; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; "
-        "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
-        "frame-ancestors 'none'")
+        f"connect-src 'self' {_ANALYTICS_ORIGIN}; object-src 'none'; base-uri 'self'; "
+        "form-action 'self'; frame-ancestors 'none'")
+
+_ANALYTICS_TAG = (f'<script defer src="{html.escape(ANALYTICS_SRC)}" '
+                  f'data-domain="{html.escape(ANALYTICS_SITE)}" '
+                  f'data-website-id="{html.escape(ANALYTICS_SITE)}"></script>\n'
+                  if ANALYTICS_SRC else "")
+_COOKIE_NOTICE_TAG = '<script defer src="/static/cookie-notice.js"></script>\n'
 
 
 @app.middleware("http")
@@ -87,6 +103,10 @@ async def _hardening(request: Request, call_next):
 
     Çerezler SameSite=Lax olsa da başka bir siteden gelen POST/DELETE burada ayrıca
     reddedilir (CSRF'e karşı ikinci katman)."""
+    # TLS vekilde (Render) sonlanır; uygulama her isteği HTTP görür. Yalnızca vekil
+    # açıkça "http" dediğinde yönlendirilir: iç sağlık kontrolleri başlıksız gelir.
+    if FORCE_HTTPS and request.headers.get("x-forwarded-proto", "").lower() == "http":
+        return RedirectResponse(str(request.url.replace(scheme="https")), status_code=308)
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         origin = request.headers.get("origin")
         if origin and origin not in ALLOWED_ORIGINS \
@@ -104,6 +124,29 @@ async def _hardening(request: Request, call_next):
     if request.url.path.startswith("/api/"):
         headers.setdefault("Cache-Control", "no-store")
     return response
+
+
+def _wants_html(request: Request) -> bool:
+    return not request.url.path.startswith("/api/") \
+        and "text/html" in request.headers.get("accept", "")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _http_error(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404 and _wants_html(request):
+        return _page("404.html", status_code=404)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code,
+                        headers=getattr(exc, "headers", None))
+
+
+@app.exception_handler(Exception)
+async def _unhandled_error(request: Request, exc: Exception):
+    """Yakalanmamış hata: ayrıntı günlüğe, kullanıcıya yalnızca genel bir mesaj.
+
+    Yığın izi yanıta sızarsa dosya yolları, sorgular ve bazen anahtarlar görünür."""
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse({"detail": "An unexpected error occurred. Please try again."},
+                        status_code=500)
 
 
 ACCESS_COOKIE = "premise_session"
@@ -196,13 +239,21 @@ def _client_key(request: Request) -> str:
 # ------------------------------------------------------------------ kimlik API
 @app.post("/api/auth/signup")
 async def signup(body: SignupIn, request: Request, response: Response) -> dict:
-    if not security.signup_throttle.allow(_client_key(request)):
+    ip = _client_key(request)
+    if not security.signup_throttle.allow(ip):
+        audit("signup", email=str(body.email), ip=ip, ok=False, reason="throttled")
         raise HTTPException(429, "Too many signup attempts. Please try again later.")
+    if body.website:
+        # Bota neyin yakalandığı söylenmez; genel bir hata yeterli.
+        audit("signup", email=str(body.email), ip=ip, ok=False, reason="honeypot")
+        raise HTTPException(400, "Something went wrong. Please try again.")
     try:
         user = accounts.create_user(str(body.email), body.password, body.role,
                                     consented=body.kvkk_consent)
     except ValueError as exc:
+        audit("signup", email=str(body.email), ip=ip, ok=False, reason="rejected")
         raise HTTPException(409, str(exc))
+    audit("signup", user_id=user["id"], email=user["email"], ip=ip)
     _send_verification(user)
     mailer.send_welcome(user["email"])
     return _login_response(response, user)
@@ -211,14 +262,17 @@ async def signup(body: SignupIn, request: Request, response: Response) -> dict:
 @app.post("/api/auth/login")
 async def login(body: LoginIn, request: Request, response: Response) -> dict:
     email = str(body.email).lower()
-    key = f"{_client_key(request)}:{email}"
+    ip = _client_key(request)
+    key = f"{ip}:{email}"
     if not security.login_throttle.allow(key) or security.login_failures.blocked(email):
         # Kilitliyken de e-postayla gelen geçici şifre kabul edilir; yoksa başkasının
         # bilerek tetiklediği kilit, hesap sahibini bir saat dışarıda bırakıyordu.
         # (bkz. accounts.authenticate_temp_only)
         rescued = accounts.authenticate_temp_only(email, body.password)
         if rescued is not None:
+            audit("login", user_id=rescued["id"], email=email, ip=ip, via="temp_password")
             return _login_response(response, rescued)
+        audit("login", email=email, ip=ip, ok=False, reason="locked")
         raise HTTPException(
             429, "Too many failed login attempts. Please wait a moment, or use "
                  "\"Forgot password?\" to get a temporary password by email.",
@@ -227,7 +281,9 @@ async def login(body: LoginIn, request: Request, response: Response) -> dict:
     user = accounts.authenticate(email, body.password)
     if user is None:
         security.login_failures.allow(email)
+        audit("login", email=email, ip=ip, ok=False, reason="bad_credentials")
         raise HTTPException(401, "Incorrect email or password.")
+    audit("login", user_id=user["id"], email=email, ip=ip)
     return _login_response(response, user)
 
 
@@ -249,6 +305,7 @@ async def logout(request: Request, response: Response) -> dict:
         try:
             accounts.revoke_session_token(int(claims["sub"]), str(claims["jti"]),
                                           int(claims["exp"]))
+            audit("logout", user_id=int(claims["sub"]), ip=_client_key(request))
         except (KeyError, TypeError, ValueError):
             pass
     for name in (ACCESS_COOKIE, REFRESH_COOKIE):
@@ -263,11 +320,14 @@ async def me(user: dict = Depends(current_user)) -> dict:
 
 
 @app.post("/api/me/password")
-async def change_password(body: PasswordChangeIn, response: Response,
+async def change_password(body: PasswordChangeIn, request: Request, response: Response,
                           user: dict = Depends(current_user)) -> dict:
+    ip = _client_key(request)
     if not security.verify_password(user["password_hash"], body.current_password):
+        audit("password_change", user_id=user["id"], ip=ip, ok=False)
         raise HTTPException(400, "Current password is incorrect.")
     accounts.set_password(user["id"], body.new_password)
+    audit("password_change", user_id=user["id"], email=user["email"], ip=ip)
     # Diğer cihazlardaki oturumlar düşer; bu tarayıcıya yeni çerez verilir.
     accounts.bump_session_epoch(user["id"])
     _login_response(response, accounts.by_id(user["id"]))
@@ -291,9 +351,13 @@ async def forgot_password(body: ForgotPasswordIn, request: Request) -> dict:
 
     Bağlantı yerine doğrudan giriş yapılabilir bir geçici şifre gönderilir; kullanıcı
     onunla giriş yapıp hesabından kalıcı bir şifre belirler (`must_change_password`)."""
-    if not security.reset_throttle.allow(_client_key(request)):
+    ip = _client_key(request)
+    if not security.reset_throttle.allow(ip):
+        audit("password_reset", email=str(body.email), ip=ip, ok=False, reason="throttled")
         raise HTTPException(429, "Too many reset requests. Please wait a moment.")
     user = accounts.by_email(str(body.email))
+    audit("password_reset", user_id=user["id"] if user else None, email=str(body.email),
+          ip=ip, known=int(user is not None))
     if user is not None:
         temp_password = accounts.issue_temp_password(user["id"])
         mailer.send_temp_password(user["email"], temp_password)
@@ -304,8 +368,10 @@ async def forgot_password(body: ForgotPasswordIn, request: Request) -> dict:
 async def verify_email(body: VerifyEmailIn) -> dict:
     user_id = accounts.consume_auth_token(body.token, "verify")
     if user_id is None:
+        audit("email_verify", ok=False)
         raise HTTPException(400, "This verification link is invalid or has expired.")
     accounts.mark_email_verified(user_id)
+    audit("email_verify", user_id=user_id)
     return {"ok": True}
 
 
@@ -370,7 +436,7 @@ def _worker(job_id: str, req: SearchRequest, user_id: int, reserved: int) -> Non
         if isinstance(exc, ValueError):
             message = str(exc)
         else:
-            traceback.print_exc()
+            log.exception("search job %s failed", job_id)
             message = "The search could not be completed. Please try again in a moment."
         events.put({"type": "error", "message": message})
     finally:
@@ -573,10 +639,11 @@ async def admin_users(_: dict = Depends(require_admin), limit: int = 200) -> lis
 
 
 @app.post("/api/admin/grant")
-async def admin_grant(body: GrantIn, _: dict = Depends(require_admin)) -> dict:
+async def admin_grant(body: GrantIn, admin: dict = Depends(require_admin)) -> dict:
     if accounts.by_id(body.user_id) is None:
         raise HTTPException(404, "User not found.")
     accounts.grant(body.user_id, body.amount, body.reason)
+    audit("admin_grant", user_id=admin["id"], target=body.user_id, amount=body.amount)
     return {"ok": True, "credits_left": accounts.balance(accounts.by_id(body.user_id))}
 
 
@@ -586,43 +653,71 @@ async def cache_clear(_: dict = Depends(require_admin)) -> dict:
 
 
 # --------------------------------------------------------------------- sayfalar
-def _page(name: str) -> FileResponse:
-    return FileResponse(WEB_DIR / name, headers={"Cache-Control": "no-cache"})
+def _page(name: str, status_code: int = 200) -> HTMLResponse:
+    # Sosyal önizleme ve canonical etiketleri mutlak adres ister; alan adı ortama göre değişir.
+    page = (WEB_DIR / name).read_text(encoding="utf-8").replace("__APP_URL__", APP_URL)
+    page = page.replace("</head>", _ANALYTICS_TAG + _COOKIE_NOTICE_TAG + "</head>", 1)
+    return HTMLResponse(page, status_code=status_code, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/")
-async def index() -> FileResponse:
+async def index() -> HTMLResponse:
     return _page("index.html")
 
 
 @app.get("/tanitim")
-async def intro_page() -> FileResponse:
+async def intro_page() -> HTMLResponse:
     return _page("intro.html")
 
 
 @app.get("/giris")
-async def auth_page() -> FileResponse:
+async def auth_page() -> HTMLResponse:
     return _page("auth.html")
 
 
 @app.get("/hesap")
-async def account_page() -> FileResponse:
+async def account_page() -> HTMLResponse:
     return _page("account.html")
 
 
 @app.get("/sifre-sifirla")
-async def reset_page() -> FileResponse:
+async def reset_page() -> HTMLResponse:
     return _page("reset.html")
 
 
 @app.get("/eposta-dogrula")
-async def verify_page() -> FileResponse:
+async def verify_page() -> HTMLResponse:
     return _page("verify.html")
 
 
 @app.get("/gizlilik")
-async def privacy_page() -> FileResponse:
+async def privacy_page() -> HTMLResponse:
     return _page("gizlilik.html")
+
+
+@app.get("/kosullar")
+async def terms_page() -> HTMLResponse:
+    return _page("kosullar.html")
+
+
+# Arama motorlarına yalnızca herkese açık sayfalar gösterilir; hesap ve API dışarıda.
+_PUBLIC_PAGES = ("/", "/tanitim", "/giris", "/gizlilik", "/kosullar")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+async def robots() -> PlainTextResponse:
+    return PlainTextResponse(
+        "User-agent: *\nDisallow: /api/\nDisallow: /hesap\n"
+        "Disallow: /sifre-sifirla\nDisallow: /eposta-dogrula\n\n"
+        f"Sitemap: {APP_URL}/sitemap.xml\n")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap() -> Response:
+    urls = "".join(f"<url><loc>{APP_URL}{path}</loc></url>" for path in _PUBLIC_PAGES)
+    return Response('<?xml version="1.0" encoding="UTF-8"?>'
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+                    f"{urls}</urlset>", media_type="application/xml")
 
 
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")

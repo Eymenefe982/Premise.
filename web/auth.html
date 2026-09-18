@@ -4,6 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Premise — Sign in</title>
+<meta name="description" content="Sign in or create a Premise account — evidence-based literature search for clinicians and students.">
+<link rel="canonical" href="__APP_URL__/giris">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Premise">
+<meta property="og:title" content="Premise — Sign in">
+<meta property="og:description" content="Sign in or create a Premise account — evidence-based literature search for clinicians and students.">
+<meta property="og:url" content="__APP_URL__/giris">
+<meta property="og:image" content="__APP_URL__/static/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Premise — Evidence-based literature assistant">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/static/style.css">
 <link rel="icon" href="/static/img/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
@@ -51,9 +63,15 @@
           I understand that my clinical questions are treated as <b>special-category personal
           data</b>, are sent to language model providers outside my country during search, and
           I <b>explicitly consent</b> to this. My search content stays private to my account —
-          see the <a href="/gizlilik" target="_blank" rel="noopener">privacy policy</a>.
+          see the <a href="/gizlilik" target="_blank" rel="noopener">privacy policy</a>. I accept
+          the <a href="/kosullar" target="_blank" rel="noopener">terms of use</a>.
         </span>
       </label>
+
+      <!-- Bot tuzağı: insanlar görmez ve doldurmaz, form dolduran botlar doldurur. -->
+      <div aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden">
+        <label>Website <input type="text" id="website" name="website" tabindex="-1" autocomplete="off"></label>
+      </div>
 
       <button type="submit" class="submit" id="submit">Sign in</button>
     </form>
@@ -71,6 +89,8 @@
       <a href="/tanitim">How does Premise work? →</a>
       &nbsp;·&nbsp;
       <a href="/gizlilik">Privacy policy →</a>
+      &nbsp;·&nbsp;
+      <a href="/kosullar">Terms of use →</a>
     </p>
   </div>
 </div>
@@ -125,6 +145,7 @@
       }
       body.role = document.getElementById('role').value;
       body.kvkk_consent = true;
+      body.website = document.getElementById('website').value;
     }
 
     try {
