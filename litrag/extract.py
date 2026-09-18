@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 
+from . import modes
 from .llm import generate
 
 EXTRACT_SYSTEM = """You extract quantitative results from biomedical article texts.
@@ -158,13 +159,15 @@ def _build_prompt(articles: list, fulltexts: dict[str, str]) -> str:
         excerpt = fulltexts.get(art.pmid or art.pmcid, "")
         if excerpt:
             # Sayısal sonuçlar çoğunlukla bulgular bölümünde geçer
-            parts.append(f"RESULTS EXCERPT: {excerpt[:3000]}")
+            parts.append(f"RESULTS EXCERPT: {excerpt[:modes.active().extract_excerpt_chars]}")
         blocks.append("\n".join(parts))
     return "ARTICLES:\n\n" + "\n\n---\n\n".join(blocks)
 
 
 def _source_text(article, fulltexts: dict[str, str]) -> str:
-    excerpt = fulltexts.get(article.pmid or article.pmcid, "")[:3000]
+    # Modele gönderilen metnin aynısı: doğrulama, modelin görmediği bir metinde
+    # sayı aramamalı.
+    excerpt = fulltexts.get(article.pmid or article.pmcid, "")[:modes.active().extract_excerpt_chars]
     return _normalize(article.abstract + " " + excerpt)
 
 
@@ -183,11 +186,17 @@ def extract_findings(articles: list, fulltexts: dict[str, str] | None = None,
     by_pmid = {(a.pmid or a.pmcid): a for a in articles}
     enriched, dropped = 0, 0
 
+    meter = modes.current().meter
     for start in range(0, len(articles), batch_size):
         batch = articles[start:start + batch_size]
+        # Bütçe tavanına yaklaşıldıysa kalan partiler atlanır: elde edilmiş bulgular
+        # korunur, sentez bütçesi harcanmaz.
+        if meter is not None and not meter.allow("extract"):
+            meter.note_degraded("extract")
+            break
         try:
             raw = generate(_build_prompt(batch, fulltexts), system=EXTRACT_SYSTEM,
-                           json_mode=True, fast=True)
+                           json_mode=True, stage="extract")
         except Exception as exc:
             print(f"[extract] numeric extraction failed: {exc}")
             continue

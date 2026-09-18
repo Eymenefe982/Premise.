@@ -13,6 +13,10 @@ from pathlib import Path
 
 _TMP = Path(tempfile.mkdtemp(prefix="premise-tests-"))
 
+# Postgres'i devre dışı bırak: `.env` bir DATABASE_URL taşıyor ve bu satır olmazsa
+# testler CANLI veritabanına bağlanır — aşağıdaki fikstürler de oradaki bütün
+# kullanıcıları siler. Boş bırakmak SQLite'a düşürür (bkz. litrag/db.py).
+os.environ["DATABASE_URL"] = ""
 os.environ["LITRAG_DB"] = str(_TMP / "test.db")
 os.environ["CACHE_ENABLED"] = "0"
 os.environ["ADMIN_EMAIL"] = ""            # testlerde yönetici hesabı tohumlanmasın

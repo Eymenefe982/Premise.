@@ -147,7 +147,7 @@
     <div class="meter"><i id="credits-bar" style="width:0"></i></div>
     <div class="rows" style="margin-top:14px">
       <div class="row"><span class="k">How many credits per search?</span>
-        <span class="v">5 + article count + 3 × full text + 5 (synthesis)</span></div>
+        <span class="v" id="mode-costs">depends on the power mode you pick</span></div>
       <div class="row"><span class="k">Cached result</span><span class="v">free</span></div>
       <div class="row"><span class="k">Cancelled search</span><span class="v">free</span></div>
       <div class="row"><span class="k">Period start</span><span class="v" id="period">—</span></div>
@@ -197,6 +197,13 @@
       : me.love ? 'Unlimited credits · full-text reading on'
       : `${me.plan_label} plan · full-text reading ${me.fulltext_allowed ? 'on' : 'off'}`;
     $('period').textContent = (me.period_start || '').slice(0, 10);
+
+    // Kredi artık formülden değil, aramanın gerçek token maliyetinden hesaplanıyor.
+    const costs = me.mode_costs || {};
+    const open = me.modes || Object.keys(costs);
+    const parts = open.filter((m) => costs[m])
+      .map((m) => `${costs[m].label}: ≈${costs[m].estimate}`);
+    if (parts.length) $('mode-costs').textContent = parts.join(' · ') + ' credits';
 
     if (me.must_change_password){
       $('force-pw').hidden = false;

@@ -11,6 +11,8 @@ from urllib.parse import quote
 from docx import Document
 from docx.shared import Pt
 
+from . import tables
+
 HEADING_RE = re.compile(r"^(#{1,4})\s+(.*)$")
 BULLET_RE = re.compile(r"^\s*[-*•]\s+(.*)$")
 
@@ -101,6 +103,9 @@ def to_markdown(result: dict) -> str:
     lines += [f"*{result.get('generated_at', '')} · {len(result.get('articles', []))} articles · "
               f"{result.get('fulltext_count', 0)} full texts · {result.get('elapsed', 0)} s*", "",
               result.get("report", ""), ""]
+    table_md = tables.to_markdown(result.get("tables") or {})
+    if table_md:
+        lines += ["## Evidence and findings", "", table_md, ""]
     notes = caveats(result)
     if notes:
         lines += ["## How far this answer can be trusted", ""]

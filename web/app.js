@@ -10,6 +10,9 @@ const state = {
   jobId: null,
   eventSource: null,
   claims: [],          // sentences in the report that carry a citation
+  powerMode: localStorage.getItem("power_mode") || "medium",
+  articlePref: 15,     // kullanıcının istediği makale sayısı; mod tavanı bunu kırpar
+  modeCosts: {},       // /api/me'den gelir: mod başına tahmini ve azami kredi
 };
 
 /* ------------------------------------------------------------------ theme */
@@ -61,7 +64,61 @@ $$("#quick-filters .chip[data-filter]").forEach((chip) => {
 
 $("#max_articles").addEventListener("input", (e) => {
   $("#count-label").textContent = e.target.value;
+  state.articlePref = Number(e.target.value);
 });
+
+/* ------------------------------------------------------------- power modes */
+$$("#power-modes .power").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    state.powerMode = btn.dataset.mode;
+    localStorage.setItem("power_mode", state.powerMode);
+    renderPowerModes();
+  });
+});
+
+function renderPowerModes() {
+  $$("#power-modes .power").forEach((btn) => {
+    const mode = btn.dataset.mode;
+    const info = state.modeCosts[mode];
+    btn.setAttribute("aria-pressed", String(mode === state.powerMode));
+    const cost = btn.querySelector(".power-cost");
+    if (cost) cost.textContent = info ? `≈ ${info.estimate} credits` : "";
+    if (info && info.label) btn.querySelector(".power-label").textContent = info.label;
+  });
+  const active = state.modeCosts[state.powerMode];
+  const detail = $("#power-detail");
+  if (detail) {
+    detail.hidden = !active;
+    if (active) {
+      $("#power-use").textContent = active.use_case || active.summary;
+      $("#power-features").innerHTML = (active.features || [])
+        .map((f) => `<li>${esc(f)}</li>`).join("");
+      $("#power-hint").textContent =
+        `About ${active.estimate} credits per search. At most ${active.max} are held `
+        + `while it runs; you are charged only what the search actually costs.`;
+    }
+  }
+
+  // Kaydırıcı modun tavanını aşamaz. Sunucu zaten kırpıyor; kaydırıcının 40'ta
+  // durup 8 makale okunması kullanıcıya yalan söylemek olurdu.
+  const slider = $("#max_articles");
+  if (slider && active?.articles) {
+    slider.max = active.articles;
+    // Kullanıcının istediği sayı hatırlanır: düşük moda inip geri çıkınca
+    // tercihi tavanın izin verdiği ölçüde geri gelir.
+    slider.value = Math.min(state.articlePref, active.articles);
+    $("#count-label").textContent = slider.value;
+  }
+  const ft = $("#use_fulltext");
+  if (ft && active && !ft.disabled) {
+    const off = active.fulltext === 0;
+    ft.closest(".switch").classList.toggle("switch-muted", off);
+    ft.closest(".switch").title = off
+      ? "Low power answers from abstracts only; full text is not read."
+      : `Up to ${active.fulltext} full texts are read in this mode.`;
+  }
+}
 
 $$("#examples button").forEach((btn) =>
   btn.addEventListener("click", () => {
@@ -92,6 +149,7 @@ async function runSearch(options = {}) {
     use_clinical: $("#use_clinical").checked,
     extract_stats: $("#extract_stats").checked,
     refresh: Boolean(options.refresh),
+    power_mode: state.powerMode,
   };
 
   startProgress();
@@ -109,7 +167,12 @@ async function runSearch(options = {}) {
         : "Server error";
       throw new Error(detail);
     }
-    const { job_id } = await res.json();
+    const { job_id, estimated_credits, reserved_credits } = await res.json();
+    const costNote = $("#progress-cost");
+    if (costNote && estimated_credits != null) {
+      costNote.textContent = `≈ ${estimated_credits} credits expected · `
+        + `${reserved_credits} held until the final cost is known`;
+    }
     state.jobId = job_id;
     listen(job_id);
   } catch (err) {
@@ -126,6 +189,7 @@ function startProgress() {
   $("#progress-bar").style.width = "2%";
   $("#progress-pct").textContent = "0%";
   $("#progress-msg").textContent = "Starting…";
+  $("#progress-cost").textContent = "";
   $("#cancel-btn").disabled = false;
   $("#cancel-btn").textContent = "Cancel";
   $("#search-btn").disabled = true;
@@ -570,6 +634,33 @@ function noAnswerHtml(result) {
   </div>`;
 }
 
+/* Yüksek güç modunun tabloları. Sayılar modelden değil, doğrulanmış çıkarımdan gelir. */
+function renderTables(result) {
+  const box = $("#tables");
+  const tables = result.tables || {};
+  const stats = tables.stats;
+  const blocks = ["evidence", "findings"].filter((k) => tables[k]);
+  if (!blocks.length) { box.innerHTML = ""; box.hidden = true; return; }
+
+  const statLine = stats ? `
+    <p class="bib-note">${stats.article_count} studies ·
+      ${stats.with_findings} with verified numbers ·
+      ${stats.total_n ? stats.total_n.toLocaleString("en-US") + " participants in total · " : ""}
+      ${stats.year_min && stats.year_max ? `published ${stats.year_min}–${stats.year_max}` : ""}</p>` : "";
+
+  box.innerHTML = statLine + blocks.map((key) => {
+    const table = tables[key];
+    const head = table.columns.map((c) => `<th>${esc(c)}</th>`).join("");
+    const rows = table.rows.map((row) =>
+      `<tr>${row.map((cell) => `<td>${esc(String(cell))}</td>`).join("")}</tr>`).join("");
+    return `<div class="agree-group">
+              <h3 class="bib-head">${esc(table.title)}</h3>
+              <table class="findings"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
+            </div>`;
+  }).join("");
+  box.hidden = false;
+}
+
 /* Modelin yazdığı uzlaşı değil, çıkarılan sayılardan hesaplanan yön uyuşması. */
 function renderAgreement(result) {
   const box = $("#agreement");
@@ -643,10 +734,14 @@ function render(result) {
   const coveragePart = matched
     ? `${matched.toLocaleString("en-US")} records matched your query · `
     : "";
+  // Ne kadar kredi düştüğü sonucun yanında durur: kullanıcı ödediğini görmeli.
+  const modeLabel = state.modeCosts[result.power_mode]?.label || "";
+  const chargePart = result.credits_charged
+    ? `${modeLabel ? modeLabel + " · " : ""}${result.credits_charged} credits · ` : "";
   $("#result-meta").innerHTML =
     esc(`${coveragePart}${result.articles.length} articles selected · ` +
         `${result.pool_size} records screened · ` +
-        `${result.fulltext_count} full texts read · ${statsPart}${result.elapsed} s · ` +
+        `${result.fulltext_count} full texts read · ${statsPart}${chargePart}${result.elapsed} s · ` +
         `${result.generated_at}`) +
     (result.cached
       ? ` <span class="cache-tag" title="This answer was reused from an identical search, so no new sources were fetched">reused from ${cacheAge(result)}</span>
@@ -663,12 +758,22 @@ function render(result) {
     : (result.report ? markdown(result.report)
                      : '<p class="empty">No synthesis was generated.</p>');
   renderClaimFlags(result);
+  renderTables(result);
   renderAgreement(result);
 
   if (result.unverified_pmids && result.unverified_pmids.length) {
     $("#report").insertAdjacentHTML("afterbegin",
       `<p class="badge badge-ft">Warning: ${result.unverified_pmids.length} citation(s) were not
        found in the result set and have been flagged in the text.</p>`);
+  }
+
+  // Kaynaksız bir Kısa Cevap, doğrulanmış bir Kısa Cevapla aynı görünür; aradaki
+  // farkı yalnızca bu uyarı gösterir.
+  if (result.short_answer_uncited && result.report) {
+    $("#report").insertAdjacentHTML("afterbegin",
+      `<p class="badge badge-ft">Warning: the short answer carries no citation that
+       could be traced to an article below, so the claim check could not verify it.
+       Read the studies before relying on it.</p>`);
   }
 
   $$("#report .src-btn").forEach((btn) =>
@@ -961,6 +1066,20 @@ async function loadAccount() {
     pill.textContent = `${me.credits_left} credits`;
     pill.title = `${me.plan_label} plan · ${me.credits_left} of ${me.credits_total} credits left`;
   }
+
+  // Güç modları: plana kapalı olanlar seçilemez, açık olanlar kredi tahminini gösterir.
+  state.modeCosts = me.mode_costs || {};
+  const allowed = me.modes || ["low", "medium", "high"];
+  $$("#power-modes .power").forEach((btn) => {
+    const open = allowed.includes(btn.dataset.mode);
+    btn.disabled = !open;
+    btn.title = open ? "" : "This power mode is available on paid plans.";
+  });
+  if (!allowed.includes(state.powerMode)) {
+    state.powerMode = allowed.includes("medium") ? "medium" : allowed[0];
+    localStorage.setItem("power_mode", state.powerMode);
+  }
+  renderPowerModes();
 
   // Full-text reading is off on the free tier: lock the toggle and say why.
   const ft = $("#use_fulltext");

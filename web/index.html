@@ -65,6 +65,26 @@
         </button>
       </div>
 
+      <div class="power-modes" id="power-modes" role="group" aria-label="Search power">
+        <button type="button" class="power" data-mode="low" aria-pressed="false">
+          <span class="power-label">Low power</span>
+          <span class="power-cost" data-cost="low"></span>
+        </button>
+        <button type="button" class="power" data-mode="medium" aria-pressed="true">
+          <span class="power-label">Medium power</span>
+          <span class="power-cost" data-cost="medium"></span>
+        </button>
+        <button type="button" class="power" data-mode="high" aria-pressed="false">
+          <span class="power-label">High power</span>
+          <span class="power-cost" data-cost="high"></span>
+        </button>
+      </div>
+      <div class="power-detail" id="power-detail" hidden>
+        <p class="power-use" id="power-use"></p>
+        <ul class="power-features" id="power-features"></ul>
+        <p class="power-hint" id="power-hint"></p>
+      </div>
+
       <div class="chips" id="quick-filters">
         <button type="button" class="chip" data-filter="meta">Meta-analysis / systematic review</button>
         <button type="button" class="chip" data-filter="rct">Randomised controlled</button>
@@ -133,6 +153,7 @@
       <button type="button" class="btn btn-cancel" id="cancel-btn">Cancel</button>
     </div>
     <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+    <p class="progress-cost" id="progress-cost"></p>
     <ol class="progress-steps" id="progress-steps"></ol>
   </section>
 
@@ -167,6 +188,7 @@
     <div class="tab-panel active" id="panel-synthesis">
       <div class="claim-flags" id="claim-flags" hidden></div>
       <article class="report" id="report"></article>
+      <section class="agreement" id="tables" hidden></section>
       <section class="agreement" id="agreement" hidden></section>
       <section class="bibliography" id="bibliography"></section>
     </div>

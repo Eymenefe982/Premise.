@@ -17,6 +17,30 @@ GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEYS", "").split(","
 # --- Model isimleri (.env ile değiştirilebilir) ---
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
 GEMINI_FAST_MODEL = os.getenv("GEMINI_FAST_MODEL", GEMINI_MODEL).strip()
+# Güç modlarının kullandığı modeller (bkz. modes.py). Bunlar olmadan her aşama pahalı
+# modelde koşar; "fast" bayrağı yıllarca tam da bu yüzden etkisizdi.
+# Yüksek modun sentezi bilerek GEMINI_MODEL'den ayrıdır: .env'deki eski değer
+# (gemini-3.5-flash, 1.50/9.00 USD) buraya sızarsa tek başına 5 TL tavanını doldurur.
+GEMINI_HIGH_MODEL = os.getenv("GEMINI_HIGH_MODEL", "gemini-3.6-flash").strip()
+GEMINI_MID_MODEL = os.getenv("GEMINI_MID_MODEL", "gemini-3.5-flash-lite").strip()
+GEMINI_LITE_MODEL = os.getenv("GEMINI_LITE_MODEL", "gemini-3.1-flash-lite").strip()
+
+# --- Maliyet ölçümü ---
+USD_TRY = float(os.getenv("USD_TRY", "49"))
+# Model -> (girdi, çıktı) USD / 1M token. Flash fiyatları 1 Ocak 2027'de iki katına
+# çıkıyor; o gün burayı güncellemek yeterli, mod profilleri zamma dayanıklı kuruldu.
+MODEL_PRICES = {
+    "gemini-3.8-flash":      (0.75, 3.75),
+    "gemini-3.7-flash":      (0.75, 3.75),
+    "gemini-3.6-flash":      (0.75, 3.75),
+    "gemini-3.5-flash":      (1.50, 9.00),   # .env'deki eski GEMINI_MODEL
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    "gemini-3.1-flash-lite": (0.25, 1.50),
+    "gemini-3.1-pro-preview": (2.00, 12.00),
+}
+# Tanınmayan bir model .env ile devreye alınırsa maliyeti olduğundan ucuz saymaktansa
+# en pahalı bilinen modelmiş gibi sayarız: yanlış taraf ucuz olan değil, pahalı olandır.
+UNKNOWN_MODEL_PRICE = (2.00, 12.00)
 
 # --- Ağ ---
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "40"))
@@ -25,13 +49,23 @@ CONTACT_EMAIL = NCBI_EMAIL or os.getenv("CONTACT_EMAIL", "").strip()
 
 # --- Dosyalar ---
 DB_PATH = Path(os.getenv("LITRAG_DB", BASE_DIR / "history.db"))
+
+# Verilmişse Postgres'e (Neon), verilmemişse yerel SQLite dosyasına bağlanılır.
+# Render'ın kapsayıcı diski geçicidir: her yeniden başlatmada sıfırlanır. Ücretli
+# diske para verilmediği için kalıcılık Postgres'ten geliyor; SQLite artık yalnız
+# yerel geliştirme ve testler için.
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+# Render'da çalışıp da hâlâ SQLite kullanıyorsa (DATABASE_URL boşsa) veri geçicidir.
+DB_IS_EPHEMERAL = bool(os.getenv("RENDER")) and not DATABASE_URL
 WEB_DIR = BASE_DIR / "web"
 EXPORT_DIR = BASE_DIR / "exports"
 
 # --- Varsayılan davranış ---
 DEFAULT_MAX_ARTICLES = 15
 DEFAULT_RECENT_YEARS = 10
-FULLTEXT_TOP_N = int(os.getenv("FULLTEXT_TOP_N", "5"))   # kaç makalenin tam metni RAG'a girsin
+# Kaç makalenin tam metni okunacağı ve ne kadarının prompt'a gireceği güç moduna
+# bağlıdır (bkz. modes.py); buradaki sınır yalnızca indirmenin üst çatısıdır.
 FULLTEXT_CHAR_LIMIT = int(os.getenv("FULLTEXT_CHAR_LIMIT", "14000"))
 # "Kaynağı gör" panelinde saklanan tam metin parçasının üst sınırı
 SOURCE_EXCERPT_LIMIT = int(os.getenv("SOURCE_EXCERPT_LIMIT", "9000"))
@@ -53,8 +87,12 @@ MIN_RELEVANT_ARTICLES = int(os.getenv("MIN_RELEVANT_ARTICLES", "3"))
 LOW_EVIDENCE_FLOOR = int(os.getenv("LOW_EVIDENCE_FLOOR", "5"))
 
 # Alaka triyajı: sentezden önce makalelerin soruyu gerçekten ele alıp almadığını ölçer.
+# Kaç adayın triyajdan geçeceği güç moduna bağlıdır (bkz. modes.py).
 TRIAGE_ENABLED = os.getenv("TRIAGE_ENABLED", "1").strip() not in ("0", "false", "False")
-TRIAGE_CANDIDATES = int(os.getenv("TRIAGE_CANDIDATES", "30"))
+
+# Konusu soruyla en çok örtüşen kaç makale, puanı ne olursa olsun triyaja girmeyi
+# garantiler. Puanda atıf sayısı konu örtüşmesini bastırabildiği için gerekli.
+TOPIC_QUOTA = int(os.getenv("TOPIC_QUOTA", "4"))
 
 # İddia doğrulama: Kısa Cevap bölümündeki her cümleyi atıf verdiği makalenin metnine
 # karşı sınar. Uydurma PMID'i değil, gerçek makaleye yanlış atfı yakalar.
@@ -102,17 +140,23 @@ REQUIRE_EMAIL_VERIFICATION = os.getenv("REQUIRE_EMAIL_VERIFICATION", "0").strip(
     not in ("0", "false", "False")
 
 # --- Kredi sistemi ---
-# kredi = TABAN + makale sayısı + TAM_METIN_KREDI × tam metin + SENTEZ_KREDI + DOGRULAMA
-CREDIT_BASE = 5
-CREDIT_PER_ARTICLE = 1
-CREDIT_PER_FULLTEXT = 3
-CREDIT_SYNTHESIS = 5
-CREDIT_VERIFY = 2          # triyaj + iddia doğrulama (ek model çağrıları)
+# Kredi artık makale/tam metin formülünden değil, aramanın gerçekten harcadığı token
+# maliyetinden hesaplanır (bkz. meter.py). 1 kredi = CREDIT_TRY kadar gerçek API gideri.
+# Free planın 150 kredisi bu orana göre tam 5 TL'lik bir tavan demektir.
+CREDIT_TRY = float(os.getenv("CREDIT_TRY", "0.0333"))
+
+# Ücretli katman henüz açılmadı: her hesap aynı tavanı paylaşır. 150 kredi,
+# CREDIT_TRY oranıyla tam olarak 5 TL'lik gerçek API giderine denktir — yani tek bir
+# hesabın bize maliyeti hiçbir koşulda 5 TL'yi geçemez. Satış açıldığında planlar
+# burada kredi sayısı ve fiyatla ayrışacak; anahtarlar o gün için duruyor.
+ACCOUNT_CREDITS = int(os.getenv("ACCOUNT_CREDITS", "150"))
+_SHARED_PLAN = {"credits": ACCOUNT_CREDITS, "fulltext": True, "price_try": 0,
+                "modes": ("low", "medium", "high")}
 
 PLANS = {
-    "free":    {"label": "Free",     "credits": 150,  "fulltext": False, "price_try": 0},
-    "asistan": {"label": "Assistant","credits": 1600, "fulltext": True,  "price_try": 349},
-    "pro":     {"label": "Pro",      "credits": 2600, "fulltext": True,  "price_try": 499},
+    "free":    {"label": "Free", **_SHARED_PLAN},
+    "asistan": {"label": "Assistant", **_SHARED_PLAN},
+    "pro":     {"label": "Pro", **_SHARED_PLAN},
 }
 
 # Kayıt sırasında seçilebilecek roller. Genel halk 2. faza kadar kapalı (bkz. plan, madde 3).

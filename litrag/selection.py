@@ -108,32 +108,55 @@ def annotate(articles: list[Article], filters: list[str], terms: set[str]) -> No
         art.topic_overlap = round(topic_overlap(art, terms), 3)
 
 
-def select(articles: list[Article], limit: int, evidence_quota: int = 3) -> list[Article]:
-    """Puana göre seçer, ama en yüksek kanıt düzeyli birkaç makaleyi garanti eder.
+def _rank(article: Article) -> tuple[int, float]:
+    """Önce triyaj notu, sonra puan.
 
-    Puanlama güncelliği ve atıfı da ödüllendirir; küçük bir listede bu, on yıl önce
-    yayımlanmış ama hâlâ geçerli bir meta-analizin dışarıda kalmasına yol açabilir.
-    Kota, kanıt piramidinin tepesinden `evidence_quota` kadar makaleyi öne alır.
+    Puan güncelliği ve atıf sayısını da ödüllendirdiği için, soruyu doğrudan
+    araştıran yeni bir çalışma, konuya yalnızca değen ünlü bir makalenin altında
+    kalabiliyordu. Triyaj çalıştıysa sıralamayı önce o belirler: az yer varsa yer
+    soruyu gerçekten yanıtlayana gider. Triyaj çalışmadıysa (relevance -1) bütün
+    kayıtlar aynı basamakta olur ve sıralama eskisi gibi puana düşer.
     """
-    if len(articles) <= limit:
-        return list(articles)
+    return (max(article.relevance, 0), article.score)
 
-    by_score = sorted(articles, key=lambda a: a.score, reverse=True)
+
+def select(articles: list[Article], limit: int, evidence_quota: int = 3,
+           topic_quota: int = 0) -> list[Article]:
+    """Alaka ve puana göre seçer, iki kontenjanı garanti ederek.
+
+    Puanlama güncelliği ve atıfı da ödüllendirir; küçük bir listede bu iki şeyi
+    dışarıda bırakabilir:
+
+    - `evidence_quota`: on yıl önce yayımlanmış ama hâlâ geçerli bir meta-analiz.
+    - `topic_quota`: soruyla tam örtüşen ama yeni ve az atıflı bir çalışma. Puanda
+      konu örtüşmesi en fazla 2,5 katkı verirken atıf 8'i geçebiliyor; bu kontenjan
+      olmadan konusu tam tutan makale, konuya yalnızca değen ünlü bir makalenin
+      altında kalıp triyaja hiç ulaşamıyordu. Eleme değil görülme garantisi:
+      alakasızsa triyaj zaten eler.
+    """
+    # Eleme gerekmese bile sıra önemlidir: rapor, okuyucunun ilk gördüğü makaleyi
+    # en alakalı sanmasına güvenir.
+    if len(articles) <= limit:
+        return sorted(articles, key=_rank, reverse=True)
+
     chosen: list[Article] = []
     seen: set[int] = set()
 
-    top_evidence = sorted((a for a in articles if a.evidence_rank >= 4.5),
-                          key=lambda a: (a.evidence_rank, a.score), reverse=True)
-    for art in top_evidence[:min(evidence_quota, limit)]:
-        chosen.append(art)
-        seen.add(id(art))
+    def reserve(candidates: list[Article], quota: int) -> None:
+        for art in candidates[:quota]:
+            if len(chosen) >= limit:
+                return
+            if id(art) not in seen:
+                chosen.append(art)
+                seen.add(id(art))
 
-    for art in by_score:
-        if len(chosen) >= limit:
-            break
-        if id(art) not in seen:
-            chosen.append(art)
-            seen.add(id(art))
+    reserve(sorted((a for a in articles if a.evidence_rank >= 4.5),
+                   key=lambda a: (a.evidence_rank, a.score), reverse=True),
+            evidence_quota)
+    reserve(sorted((a for a in articles if a.topic_overlap > 0),
+                   key=lambda a: (a.topic_overlap, a.score), reverse=True),
+            topic_quota)
+    reserve(sorted(articles, key=_rank, reverse=True), len(articles))
 
-    chosen.sort(key=lambda a: a.score, reverse=True)
+    chosen.sort(key=_rank, reverse=True)
     return chosen

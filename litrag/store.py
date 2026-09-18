@@ -1,15 +1,17 @@
-"""Yerel SQLite deposu: arama geçmişi, kaydedilen raporlar ve kişisel kütüphane."""
+"""Arama geçmişi, kaydedilen raporlar ve kişisel kütüphane.
+
+Yerelde SQLite dosyasında, canlıda Postgres'te tutulur (bkz. db.py). Bu katman
+motor farkını bilmeden `conn()` üzerinden çalışır.
+"""
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
 from datetime import datetime
 
-from .config import DB_PATH
+from . import db
 
 _lock = threading.Lock()
-_conn: sqlite3.Connection | None = None
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS searches (
@@ -49,17 +51,15 @@ CREATE INDEX IF NOT EXISTS idx_cache_created ON search_cache(created_at);
 """
 
 
-def conn() -> sqlite3.Connection:
-    global _conn
-    if _conn is None:
-        _conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=20)
-        _conn.row_factory = sqlite3.Row
-        # Web sunucusu ve terminal aracı aynı veritabanını aynı anda kullanabilsin
-        _conn.execute("PRAGMA journal_mode=WAL")
-        _conn.execute("PRAGMA busy_timeout=20000")
-        _conn.executescript(SCHEMA)
-        _conn.commit()
-    return _conn
+def conn() -> db.Database:
+    d = db.get()
+    if not getattr(d, "_store_schema_ready", False):
+        with _lock:
+            if not getattr(d, "_store_schema_ready", False):
+                d.executescript(SCHEMA)
+                d.commit()
+                d._store_schema_ready = True
+    return d
 
 
 def _now() -> str:
@@ -71,8 +71,11 @@ def migrate_library() -> None:
 
     Eski sürümde UNIQUE(pmid, doi, title) genel kapsamlıydı: bir makaleyi bir kullanıcı
     kaydettiyse başka kimse kaydedemiyordu. SQLite kısıt değiştirmeye izin vermediği için
-    tablo bir kez yeniden kurulur.
+    tablo bir kez yeniden kurulur. Postgres'e her zaman güncel şemayla başlanır, bu göçe
+    hiç ihtiyaç duymaz.
     """
+    if db.get().backend != "sqlite":
+        return
     row = conn().execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='library'").fetchone()
     if not row or "UNIQUE(pmid, doi, title)" not in (row["sql"] or ""):
@@ -151,8 +154,10 @@ def add_to_library(article: dict, tag: str = "", note: str = "", user_id: int = 
             )
             conn().commit()
             return True
-        except sqlite3.IntegrityError:
-            return False
+        except Exception as exc:
+            if db.is_integrity_error(exc):
+                return False
+            raise
 
 
 def list_library(user_id: int, limit: int = 500) -> list[dict]:
@@ -171,13 +176,13 @@ def stats(user_id: int | None = None) -> dict:
     c = conn()
     if user_id is None:
         return {
-            "reports": c.execute("SELECT COUNT(*) FROM reports").fetchone()[0],
-            "library": c.execute("SELECT COUNT(*) FROM library").fetchone()[0],
-            "searches": c.execute("SELECT COUNT(*) FROM searches").fetchone()[0],
+            "reports": c.execute("SELECT COUNT(*) AS n FROM reports").fetchone()["n"],
+            "library": c.execute("SELECT COUNT(*) AS n FROM library").fetchone()["n"],
+            "searches": c.execute("SELECT COUNT(*) AS n FROM searches").fetchone()["n"],
         }
     return {
-        "reports": c.execute("SELECT COUNT(*) FROM reports WHERE user_id = ?",
-                             (user_id,)).fetchone()[0],
-        "library": c.execute("SELECT COUNT(*) FROM library WHERE user_id = ?",
-                             (user_id,)).fetchone()[0],
+        "reports": c.execute("SELECT COUNT(*) AS n FROM reports WHERE user_id = ?",
+                             (user_id,)).fetchone()["n"],
+        "library": c.execute("SELECT COUNT(*) AS n FROM library WHERE user_id = ?",
+                             (user_id,)).fetchone()["n"],
     }

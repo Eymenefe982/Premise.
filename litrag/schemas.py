@@ -9,6 +9,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 LANGUAGES = ("English", "Türkçe", "Deutsch", "Français", "Español")
 FILTERS = ("rct", "meta", "guideline", "free_fulltext", "humans")
+POWER_MODES = ("low", "medium", "high")
 
 
 def _clean_email(v: object) -> str:
@@ -95,6 +96,7 @@ class SearchIn(BaseModel):
     extract_stats: bool = True
     synthesize: bool = True
     refresh: bool = False
+    power_mode: Literal[POWER_MODES] = "medium"   # type: ignore[valid-type]
 
     @field_validator("filters")
     @classmethod

@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import secrets
-import sqlite3
 import threading
 from datetime import datetime, timedelta
 
 from cryptography.fernet import Fernet
 
-from . import security
-from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, CREDIT_BASE, CREDIT_PER_ARTICLE,
-                     CREDIT_PER_FULLTEXT, CREDIT_SYNTHESIS, CREDIT_VERIFY, JWT_SECRET,
-                     LOVE_EMAIL, PLANS, SECRET_KEY)
+from . import db, meter, modes, security
+from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET, LOVE_EMAIL, PLANS,
+                     SECRET_KEY)
 from .store import conn, migrate_library
 
 _lock = threading.Lock()
@@ -62,7 +60,7 @@ def _now() -> str:
 
 
 def _column_names(table: str) -> set[str]:
-    return {r["name"] for r in conn().execute(f"PRAGMA table_info({table})").fetchall()}
+    return conn().column_names(table)
 
 
 def init() -> None:
@@ -117,7 +115,7 @@ def field_key() -> str:
 
 
 # --------------------------------------------------------------------- kullanıcılar
-def _row_to_user(row: sqlite3.Row | None) -> dict | None:
+def _row_to_user(row) -> dict | None:
     return dict(row) if row else None
 
 
@@ -142,7 +140,9 @@ def create_user(email: str, password: str, role: str, plan: str = "free",
                  _now() if consented else None, _now()),
             )
             conn().commit()
-        except sqlite3.IntegrityError:
+        except Exception as exc:
+            if not db.is_integrity_error(exc):
+                raise
             raise ValueError("Something went wrong. If you already have an account, "
                              "please try signing in.")
     return by_id(int(cur.lastrowid))
@@ -232,13 +232,26 @@ def _seed_admin() -> None:
     if by_email(ADMIN_EMAIL):
         return
     with _lock:
-        empty = conn().execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-        conn().execute(
-            "INSERT INTO users (id, email, password_hash, role, plan, period_start,"
-            " kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (1 if empty else None, ADMIN_EMAIL, security.hash_password(ADMIN_PASSWORD),
-             "admin", "pro", _now(), _now(), _now()),
-        )
+        empty = conn().execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"] == 0
+        # Boş tabloda id'yi 1 olarak sabitlemek eski tek-kullanıcılı raporların
+        # (user_id=1 varsayılanı) yöneticiye devrini garanti eder. Postgres'te SERIAL
+        # sütununa NULL göndermek NOT NULL ihlali olur; bu yüzden id yalnızca
+        # gerektiğinde, sütun listesine dahil edilerek gönderilir.
+        if empty:
+            conn().execute(
+                "INSERT INTO users (id, email, password_hash, role, plan, period_start,"
+                " kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (1, ADMIN_EMAIL, security.hash_password(ADMIN_PASSWORD),
+                 "admin", "pro", _now(), _now(), _now()),
+            )
+            conn().fix_serial("users")
+        else:
+            conn().execute(
+                "INSERT INTO users (email, password_hash, role, plan, period_start,"
+                " kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?)",
+                (ADMIN_EMAIL, security.hash_password(ADMIN_PASSWORD),
+                 "admin", "pro", _now(), _now(), _now()),
+            )
         conn().commit()
     print(f"  [accounts] yönetici hesabı oluşturuldu: {ADMIN_EMAIL}")
 
@@ -293,21 +306,31 @@ def balance(user: dict) -> int | None:
     return max(0, allowance - int(user["credits_used"] or 0))
 
 
-def cost_of(article_count: int, fulltext_count: int, synthesised: bool,
-            verified: bool = False) -> int:
-    return (CREDIT_BASE
-            + CREDIT_PER_ARTICLE * max(0, article_count)
-            + CREDIT_PER_FULLTEXT * max(0, fulltext_count)
-            + (CREDIT_SYNTHESIS if synthesised else 0)
-            + (CREDIT_VERIFY if verified else 0))
+def user_count() -> int:
+    with _lock:
+        return conn().execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
+
+
+def allowed_modes(user: dict) -> tuple[str, ...]:
+    """Hesabın kullanabileceği güç modları."""
+    if is_unlimited(user):
+        return modes.POWER_MODES
+    return tuple(plan_of(user).get("modes", modes.POWER_MODES))
+
+
+def estimated_cost_of(req) -> int:
+    """Tipik maliyet — kullanıcıya "≈ şu kadar kredi" derken kullanılır."""
+    return meter.credits_for(modes.profile(getattr(req, "power_mode", None)).estimate_try)
 
 
 def max_cost_of(req) -> int:
-    """Arama başlamadan önceki en kötü ihtimal — rezervasyon bunun üzerinden yapılır."""
-    from .config import CLAIM_CHECK_ENABLED, FULLTEXT_TOP_N, TRIAGE_ENABLED
-    fulltext = FULLTEXT_TOP_N if req.use_fulltext else 0
-    return cost_of(req.max_articles, fulltext, req.synthesize,
-                   verified=TRIAGE_ENABLED or CLAIM_CHECK_ENABLED)
+    """Rezerve edilecek kredi: modun tavan maliyeti.
+
+    Gerçek tutar ancak arama bitince, harcanan token'lardan bilinir; aradaki fark
+    `settle` ile iade edilir. Önce bloke etmek eşzamanlı aramalarda bakiyenin
+    aşılmasını engeller.
+    """
+    return meter.credits_for(modes.profile(getattr(req, "power_mode", None)).ceiling_try)
 
 
 def reserve(user_id: int, amount: int) -> bool:
@@ -351,8 +374,13 @@ def settle(user_id: int, reserved: int, actual: int, reason: str,
         return 0
     with _lock:
         if not is_unlimited(user) and reserved != actual:
-            conn().execute("UPDATE users SET credits_used = MAX(0, credits_used + ?)"
-                           " WHERE id = ?", (actual - reserved, user_id))
+            # Alt sınır SQL'de değil burada uygulanır: SQLite'ın iki argümanlı
+            # MAX(a, b) fonksiyonunun Postgres'te karşılığı yok (orada MAX bir
+            # toplama fonksiyonudur). Okuma ve yazma zaten aynı kilidin altında.
+            row = conn().execute("SELECT credits_used FROM users WHERE id = ?",
+                                 (user_id,)).fetchone()
+            used = max(0, int(row["credits_used"] or 0) + (actual - reserved)) if row else 0
+            conn().execute("UPDATE users SET credits_used = ? WHERE id = ?", (used, user_id))
         if actual:
             conn().execute(
                 "INSERT INTO credit_ledger (user_id, created_at, amount, reason, report_id)"
@@ -468,6 +496,14 @@ def public(user: dict) -> dict:
         "unlimited": is_unlimited(user),
         "love": is_love(user),
         "fulltext_allowed": True if is_unlimited(user) else plan["fulltext"],
+        "modes": list(allowed_modes(user)),
+        "mode_costs": {name: {"label": p.label, "summary": p.summary,
+                              "use_case": p.use_case, "features": p.features,
+                              "estimate": meter.credits_for(p.estimate_try),
+                              "max": meter.credits_for(p.ceiling_try),
+                              "articles": p.max_articles,
+                              "fulltext": p.fulltext_top_n}
+                       for name, p in modes.PROFILES.items()},
         "has_ncbi_key": bool(user.get("ncbi_key_enc")),
         "email_verified": bool(user.get("email_verified_at")),
         "must_change_password": bool(user.get("must_change_password")),

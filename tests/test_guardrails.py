@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from litrag import agreement, selection
+from litrag.llm import short_answer_citations, validate_citations
 from litrag.models import Article
 from litrag.pipeline import _answer_mode, _is_direct, _is_relevant
 
@@ -96,6 +97,56 @@ def test_evidence_quota_keeps_top_level_evidence_in_the_list():
     assert old_meta.score < min(a.score for a in fresh)          # puanca en sonda
     chosen = selection.select(fresh + [old_meta], limit=5)
     assert old_meta in chosen                                    # yine de seçilir
+
+
+# ---------------------------------------------------------------------- seçim
+def test_direct_answer_outranks_a_merely_popular_article():
+    """Triyaj notu puandan önce gelir.
+
+    Puan atıf sayısını ödüllendirir; konuya yalnızca değen ama çok atıf almış bir
+    makale, soruyu doğrudan araştıran yeni bir çalışmanın yerini alabiliyordu.
+    """
+    famous = art(pmid="1", title="popüler ama dolaylı")
+    famous.relevance, famous.score = 1, 30.0
+    direct = art(pmid="2", title="soruyu doğrudan araştırıyor")
+    direct.relevance, direct.score = 2, 12.0
+
+    chosen = selection.select([famous, direct], limit=1, evidence_quota=0)
+    assert chosen == [direct]
+
+
+def test_on_topic_article_reaches_triage_despite_a_low_score():
+    """Konusu tam tutan ama az atıflı çalışma, ünlü ama dolaylı makalelerin
+    altında kalıp triyaja hiç ulaşamıyordu."""
+    crowd = []
+    for i in range(10):
+        a = art(pmid=f"c{i}", title="ünlü ama dolaylı")
+        a.topic_overlap, a.score = 0.2, 30.0 + i      # hepsi puanca çok yüksek
+        crowd.append(a)
+    on_topic = art(pmid="hedef", title="soruyla tam örtüşüyor")
+    on_topic.topic_overlap, on_topic.score = 0.95, 9.0
+
+    without = selection.select(crowd + [on_topic], limit=5, evidence_quota=0)
+    with_quota = selection.select(crowd + [on_topic], limit=5, evidence_quota=0,
+                                  topic_quota=2)
+    assert on_topic not in without          # eski davranış: puan elerdi
+    assert on_topic in with_quota           # kontenjan görülmesini garanti eder
+
+
+def test_quotas_never_exceed_the_limit():
+    pool = []
+    for i in range(12):
+        a = art(pmid=str(i), pub_types=["Meta-Analysis"])
+        a.topic_overlap, a.score = 0.9, float(i)
+        pool.append(a)
+    assert len(selection.select(pool, limit=4, evidence_quota=3, topic_quota=4)) == 4
+
+
+def test_selection_falls_back_to_score_before_triage_runs():
+    """Triyaj çalışmadıysa (relevance -1) sıralama eskisi gibi puana dayanır."""
+    low, high = art(pmid="1"), art(pmid="2")
+    low.score, high.score = 5.0, 20.0
+    assert selection.select([low, high], limit=1, evidence_quota=0) == [high]
 
 
 # ------------------------------------------------------------------- cevap kipi
@@ -184,3 +235,44 @@ def test_agreement_ignores_outcomes_reported_by_a_single_study():
     only.findings = [{"outcome": "all-cause mortality", "measure": "HR",
                       "value": "0.80", "ci": "0.70 - 0.91", "p": ""}]
     assert agreement.build([only]) == []
+
+
+# ------------------------------------------------------------- atıf doğrulama
+def test_fabricated_pmid_is_flagged():
+    real = art(pmid="38768620")
+    text, fake = validate_citations("Bu doğru [PMID: 38768620], bu uydurma [PMID: 99999999].",
+                                    [real])
+    assert fake == ["99999999"]
+    assert "⚠ unverified" in text
+
+
+def test_fabricated_pmid_cannot_hide_in_a_multi_citation_bracket():
+    """Model kuralı çiğneyip tek paranteze birkaç PMID sığdırabiliyor. Yalnız ilkine
+    bakmak, uydurma numaranın kalabalığın arkasına saklanmasına izin verirdi."""
+    real = art(pmid="38768620")
+    _, fake = validate_citations(
+        "Kanıt tutarlı [PMID: 38768620, PMID: 31535829, PMID: 99999999].", [real])
+    assert fake == ["31535829", "99999999"]
+
+
+def test_uncited_short_answer_is_detected():
+    """Kaynaksız Kısa Cevap sessizce geçmemeli: doğrulanacak iddia yoktur."""
+    real = art(pmid="38768620")
+    cited = "## Short Answer\nEtkili bulunmuştur [PMID: 38768620].\n\n## Evidence Summary\n..."
+    bare = "## Short Answer\nEtkili bulunmuştur.\n\n## Evidence Summary\nDetay [PMID: 38768620]."
+    assert short_answer_citations(cited, [real]) == ["38768620"]
+    assert short_answer_citations(bare, [real]) == []     # atıf başka bölümde
+
+
+def test_uncited_short_answer_ignores_fabricated_pmids():
+    """Uydurma numara, Kısa Cevabı kaynaklı saymaya yetmez."""
+    real = art(pmid="38768620")
+    made_up = "## Short Answer\nEtkili bulunmuştur [PMID: 99999999].\n\n## Evidence Summary\n..."
+    assert short_answer_citations(made_up, [real]) == []
+
+
+def test_index_numbers_are_not_mistaken_for_citations():
+    """Bağlamdaki 'ARTICLE 4' sıra numarası PMID sayılmamalı."""
+    real = art(pmid="38768620")
+    _, fake = validate_citations("ARTICLE 4 shows this [PMID: 38768620].", [real])
+    assert fake == []

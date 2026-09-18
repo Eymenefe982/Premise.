@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 
 from litrag import accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, APP_NAME, COOKIE_SECURE,
+                           DB_IS_EPHEMERAL, DB_PATH,
                            GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
                            TRUST_PROXY_HEADERS, VERIFY_TOKEN_HOURS, WEB_DIR)
@@ -42,6 +43,10 @@ async def _lifespan(app: FastAPI):
     # uvicorn'un `app:app` ile doğrudan başlatıldığı ortamlarda (ör. Render) `main()`
     # hiç çalışmaz; şema kurulumu bu yüzden burada, ASGI lifespan'ında yapılır.
     accounts.init()
+    if DB_IS_EPHEMERAL:
+        print("  !! VERİTABANI GEÇİCİ DİSKTE: " + str(DB_PATH))
+        print("  !! Bu kapsayıcı yeniden başladığında hesaplar, geçmiş, krediler ve")
+        print("  !! önbellek silinir. Kalıcı disk bağlayıp LITRAG_DB'yi oraya yönlendirin.")
     removed = cache.purge_expired()
     if removed:
         print(f"  {removed} expired cache entries removed")
@@ -309,10 +314,9 @@ def _worker(job_id: str, req: SearchRequest, user_id: int, reserved: int) -> Non
         # Önbellekten dönen sonuç hiçbir model çağrısı üretmez, ücretsizdir. Soruyu
         # yanıtlayan makale bulunamadığında da ücret alınmaz: kullanıcı cevap almadı.
         if not result.get("cached") and result.get("answer_mode") != "none":
-            charged = accounts.cost_of(len(result.get("articles", [])),
-                                       result.get("fulltext_count", 0),
-                                       bool(result.get("report")),
-                                       verified=bool(result.get("triaged")))
+            # Kredi, aramanın gerçekten harcadığı token maliyetinden hesaplanır
+            # (bkz. meter.py); rezerve edilen tavanla arasındaki fark iade edilir.
+            charged = int(result.get("usage", {}).get("credits", 0))
         result["credits_charged"] = charged
         accounts.settle(user_id, reserved, charged, "search", report_id)
 
@@ -365,6 +369,11 @@ async def start_search(body: SearchIn, request: Request,
     # Ücretsiz katmanda tam metin okuma kapalıdır — en pahalı adım budur.
     if not accounts.public(user)["fulltext_allowed"]:
         payload["use_fulltext"] = False
+
+    allowed = accounts.allowed_modes(user)
+    if payload.get("power_mode") not in allowed:
+        raise HTTPException(403, "Your plan does not include this power mode. "
+                                 "Upgrade your plan to run high-power searches.")
     req = SearchRequest.from_dict(payload)
 
     # Kredi aramaya başlamadan bloke edilir; gerçek maliyet belli olunca fark iade
@@ -380,7 +389,8 @@ async def start_search(body: SearchIn, request: Request,
     _jobs[job_id] = {"events": queue.Queue(), "user_id": user["id"], "finished_at": None}
     threading.Thread(target=_worker, args=(job_id, req, user["id"], needed),
                      daemon=True).start()
-    return {"job_id": job_id, "estimated_credits": needed}
+    return {"job_id": job_id, "estimated_credits": accounts.estimated_cost_of(req),
+            "reserved_credits": needed}
 
 
 def _own_job(job_id: str, user: dict) -> dict:
@@ -501,6 +511,10 @@ async def admin_status(_: dict = Depends(require_admin)) -> dict:
         "gemini_fast_model": GEMINI_FAST_MODEL,
         "ncbi_email": bool(NCBI_EMAIL),
         "ncbi_api_key": bool(NCBI_API_KEY),
+        # Veritabanı geçici diskteyse hesaplar her yeniden başlatmada silinir;
+        # bunu fark etmenin tek yolu bakmaktır, uygulama hata vermez.
+        "database": {"path": str(DB_PATH), "ephemeral": DB_IS_EPHEMERAL,
+                     "users": accounts.user_count()},
         "stats": store.stats(),
         "cache": cache.stats(),
     }

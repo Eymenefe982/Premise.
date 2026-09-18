@@ -13,3 +13,4 @@ python-docx
 biopython
 pytest
 email-validator
+psycopg[binary]

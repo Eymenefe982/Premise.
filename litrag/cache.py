@@ -16,6 +16,7 @@ import re
 import unicodedata
 from datetime import datetime, timedelta
 
+from . import db as db_module
 from .config import CACHE_TTL_DAYS
 from .store import _lock, conn
 
@@ -47,6 +48,9 @@ def make_key(req) -> str:
         "use_clinical": req.use_clinical,
         "extract_stats": req.extract_stats,
         "synthesize": req.synthesize,
+        # Mod, sonucun kendisini belirler: düşük güçte yazılmış bir cevap yüksek güç
+        # isteyen kullanıcıya verilemez.
+        "power_mode": getattr(req, "power_mode", "medium"),
     }
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -86,16 +90,24 @@ def put(key: str, req, result: dict) -> None:
     if result.get("cached"):
         return
     stored = {k: v for k, v in result.items() if k != "report_id"}
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = json.dumps(stored, ensure_ascii=False)
+    # SQLite'ın "INSERT OR REPLACE"i Postgres'te yok; ikisinde de aynı davranışı
+    # (varsa güncelle, isabet sayısını koru) ayrı sorgularla üretiyoruz.
+    upsert = ("INSERT INTO search_cache (key, created_at, last_used, query, language,"
+             " max_articles, hits, payload) VALUES (?,?,?,?,?,?,"
+             " COALESCE((SELECT hits FROM search_cache WHERE key = ?), 0), ?)")
+    if db_module.get().backend == "postgres":
+        upsert = ("INSERT INTO search_cache (key, created_at, last_used, query, language,"
+                 " max_articles, hits, payload) VALUES (?,?,?,?,?,?,"
+                 " COALESCE((SELECT hits FROM search_cache WHERE key = ?), 0), ?)"
+                 " ON CONFLICT (key) DO UPDATE SET"
+                 " created_at = EXCLUDED.created_at, last_used = EXCLUDED.last_used,"
+                 " query = EXCLUDED.query, language = EXCLUDED.language,"
+                 " max_articles = EXCLUDED.max_articles, payload = EXCLUDED.payload")
     with _lock:
-        conn().execute(
-            "INSERT OR REPLACE INTO search_cache (key, created_at, last_used, query, language,"
-            " max_articles, hits, payload) VALUES (?,?,?,?,?,?,"
-            " COALESCE((SELECT hits FROM search_cache WHERE key = ?), 0), ?)",
-            (key, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-             req.query, req.language, req.max_articles, key,
-             json.dumps(stored, ensure_ascii=False)),
-        )
+        conn().execute(upsert, (key, now, now, req.query, req.language,
+                                req.max_articles, key, payload))
         conn().commit()
 
 

@@ -5,13 +5,15 @@ import concurrent.futures
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from . import agreement, cache, selection
+from . import agreement, cache, modes, selection, tables
 from .config import (CACHE_ENABLED, CLAIM_CHECK_ENABLED, DEFAULT_MAX_ARTICLES,
-                     DEFAULT_RECENT_YEARS, FULLTEXT_TOP_N, LOW_EVIDENCE_FLOOR,
-                     MIN_EVIDENCE_POOL, MIN_RELEVANT_ARTICLES, SOURCE_EXCERPT_LIMIT,
-                     TRIAGE_CANDIDATES, TRIAGE_ENABLED)
+                     DEFAULT_RECENT_YEARS, LOW_EVIDENCE_FLOOR, MIN_EVIDENCE_POOL,
+                     MIN_RELEVANT_ARTICLES, SOURCE_EXCERPT_LIMIT, TOPIC_QUOTA,
+                     TRIAGE_ENABLED)
 from .extract import extract_findings
-from .llm import check_claims, synthesize, translate_query, triage, validate_citations
+from .meter import Meter
+from .llm import (check_claims, short_answer_citations, synthesize, translate_query,
+                  triage, validate_citations)
 from .models import Article, ClinicalResource
 from .sources import clinical, europepmc, openaccess, pmc, pubmed
 
@@ -31,6 +33,7 @@ class SearchRequest:
     extract_stats: bool = True
     synthesize: bool = True
     refresh: bool = False          # önbelleği atlayıp taramayı baştan çalıştır
+    power_mode: str = modes.DEFAULT_MODE   # low / medium / high (bkz. modes.py)
 
     @classmethod
     def from_dict(cls, data: dict) -> "SearchRequest":
@@ -49,6 +52,7 @@ class SearchRequest:
             extract_stats=bool(data.get("extract_stats", True)),
             synthesize=bool(data.get("synthesize", True)),
             refresh=bool(data.get("refresh", False)),
+            power_mode=modes.profile(data.get("power_mode")).name,
         )
 
 
@@ -136,10 +140,28 @@ def _suggestions(req: SearchRequest, pool_size: int) -> list[str]:
 
 
 def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
+    """Aramayı, seçilen güç modunun profili ve maliyet sayacı altında çalıştırır."""
+    prof = modes.profile(getattr(req, "power_mode", None))
+    job_meter = Meter(prof.ceiling_try)
+    with modes.use(prof.name, job_meter):
+        result = _run_search(req, progress, cancel)
+
+    result["power_mode"] = prof.name
+    # Önbellekten gelen sonuç hiçbir model çağrısı üretmedi: sayaç sıfırdır ve
+    # kullanıcıdan da ücret alınmaz (bkz. app._worker).
+    result["usage"] = job_meter.summary()
+    return result
+
+
+def _run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
     progress = progress or _noop
     started = datetime.now()
+    prof = modes.active()
     if not req.query:
         raise ValueError("The search query cannot be empty.")
+
+    # Kullanıcı kaydırıcıyı 40'a çekmiş olabilir; modun tavanı bağlayıcıdır.
+    max_articles = min(req.max_articles, prof.max_articles)
 
     def checkpoint() -> None:
         """Uzun adımların arasında iptal isteğini kontrol eder."""
@@ -167,7 +189,7 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
     #    yalnız birine uygulanırsa filtrelenmemiş kaynak havuzu sulandırır ve seçim
     #    kullanıcının koyduğu sınırı hiç görmemiş makalelerden yapılır.
     progress(f"Searching PubMed and Europe PMC with {len(variants)} query variants", 0.16)
-    per_source = max(req.max_articles, 12)
+    per_source = max(max_articles, 12)
     jobs: dict[str, concurrent.futures.Future] = {}
     results: dict[str, list] = {}
 
@@ -270,7 +292,8 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
     # 4) Alaka triyajı. Seçimden önce çalışır: hem alakasız kayıtları listeden düşürür,
     #    hem de cevabın hangi güvenle yazılabileceğine karar veren sayıyı üretir.
     candidates = selection.select(
-        articles, min(max(req.max_articles * 2, 20), TRIAGE_CANDIDATES))
+        articles, min(max(max_articles * 2, 20), prof.triage_candidates),
+        topic_quota=TOPIC_QUOTA)
     graded = 0
     if TRIAGE_ENABLED:
         progress(f"Checking which of the {len(candidates)} best records actually "
@@ -281,7 +304,7 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
     eligible = [a for a in candidates if a.relevance != 0] if graded else candidates
     if not eligible:                       # hepsi alakasız: yine de kullanıcıya gösterilir
         eligible = candidates
-    selected = selection.select(eligible, req.max_articles)
+    selected = selection.select(eligible, max_articles)
 
     answer_mode = _answer_mode(selected)
     relevant_count = sum(1 for a in selected if _is_relevant(a))
@@ -297,17 +320,20 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
         stats_count = dropped_findings = 0
         report, fake_pmids, flagged_claims = "", [], []
         agreement_table: list[dict] = []
+        table_data: dict = {}
+        short_answer_uncited = False
         if answer_mode == "none":
             progress("No article in the results directly answers the question", 1.0)
     else:
         # 6) En nitelikli makalelerin PMC tam metnini indir
         fulltexts = {}
-        if req.use_fulltext:
-            targets = [a for a in selected if a.pmcid][:FULLTEXT_TOP_N]
+        if req.use_fulltext and prof.fulltext_top_n:
+            targets = [a for a in selected if a.pmcid][:prof.fulltext_top_n]
             if targets:
                 progress(f"Downloading PubMed Central full text for {len(targets)} articles", 0.58)
+                limit = prof.fulltext_chars
                 with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
-                    texts = list(pool.map(lambda a: pmc.fetch_fulltext(a.pmcid), targets))
+                    texts = list(pool.map(lambda a: pmc.fetch_fulltext(a.pmcid, limit), targets))
                 for art, text in zip(targets, texts):
                     if text:
                         fulltexts[art.pmid or art.pmcid] = text
@@ -317,17 +343,23 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
         checkpoint()
         report, fake_pmids, flagged_claims = "", [], []
         stats_count = dropped_findings = 0
+        table_data = {}
+        short_answer_uncited = False
+        do_extract = req.extract_stats and prof.extract
         steps = []
-        if req.extract_stats:
+        if do_extract:
             steps.append("extracting numeric findings")
         steps.append("writing the synthesis" if answer_mode == "full"
                      else "writing a limited, study-by-study summary")
         progress(f"Reading {len(selected)} articles: " + " and ".join(steps), 0.7)
 
+        # Havuz görevleri `modes.submit` ile gönderilir: contextvar'lar worker
+        # thread'lere kendiliğinden geçmez, geçmezse bu iki adım kullanıcının seçtiği
+        # modu değil varsayılanı kullanırdı.
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            stats_job = pool.submit(extract_findings, selected, fulltexts) if req.extract_stats else None
-            synth_job = pool.submit(synthesize, req.query, selected, fulltexts, req.language,
-                                    low_evidence, answer_mode)
+            stats_job = modes.submit(pool, extract_findings, selected, fulltexts) if do_extract else None
+            synth_job = modes.submit(pool, synthesize, req.query, selected, fulltexts,
+                                     req.language, low_evidence, answer_mode)
             if stats_job is not None:
                 try:
                     stats_count, dropped_findings = stats_job.result()
@@ -340,10 +372,22 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
         if report:
             progress("Verifying citations and checking the short answer against the sources", 0.92)
             report, fake_pmids = validate_citations(report, selected)
-            if CLAIM_CHECK_ENABLED:
-                flagged_claims = check_claims(report, selected, fulltexts)
+            # Kısa Cevap hiç kaynak göstermiyorsa doğrulanacak iddia da yoktur ve
+            # `check_claims` sessizce boş döner. Kullanıcı bunu görmeli: kaynaksız
+            # bir paragraf, doğrulanmış bir paragrafla aynı görünür.
+            short_answer_uncited = not short_answer_citations(report, selected)
+            job_meter = modes.current().meter
+            if CLAIM_CHECK_ENABLED and prof.claim_check:
+                # Bütçe tavanına gelindiyse ilk kısılan adım budur: sentez zaten
+                # yazıldı, doğrulama katmanının atlandığı sonuçta işaretlenir.
+                if job_meter is None or job_meter.allow("claims"):
+                    flagged_claims = check_claims(report, selected, fulltexts)
+                else:
+                    job_meter.note_degraded("claims")
 
         agreement_table = agreement.build(selected)
+        if prof.tables:
+            table_data = tables.build(selected)
 
     unique_guidelines = list({g.key: g for g in guidelines}.values())
     unique_guidelines.sort(key=lambda x: x.year, reverse=True)
@@ -368,6 +412,7 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
         "stats_count": stats_count,
         "dropped_findings": dropped_findings,
         "agreement": agreement_table,
+        "tables": table_data,
         "flagged_claims": flagged_claims,
         # "Kaynağı gör" panelinin eşleştirme yapacağı tam metin parçaları
         "sources": {pmid: text[:SOURCE_EXCERPT_LIMIT] for pmid, text in fulltexts.items()},
@@ -377,6 +422,7 @@ def run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
             "links": [r.to_dict() for r in clinical.quick_links(tr["english"])],
         },
         "unverified_pmids": fake_pmids,
+        "short_answer_uncited": short_answer_uncited,
         "elapsed": round((datetime.now() - started).total_seconds(), 1),
         "generated_at": started.strftime("%Y-%m-%d %H:%M"),
         "cached": False,
