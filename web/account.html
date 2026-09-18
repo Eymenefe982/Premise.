@@ -180,6 +180,11 @@
   const first = new URLSearchParams(location.search).has('ilk');
   if (first) $('welcome').hidden = false;
 
+  function esc(text){
+    return String(text ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   function flag(el, text, ok){
     el.textContent = text;
     el.className = 'flag ' + (ok ? 'ok' : 'err');
@@ -238,8 +243,8 @@
     }
     box.innerHTML = rows.map(r => `
       <div class="row">
-        <span class="k">${r.created_at} · ${r.reason}</span>
-        <span class="v amt ${r.amount > 0 ? 'plus' : ''}">${r.amount > 0 ? '+' : ''}${r.amount}</span>
+        <span class="k">${esc(r.created_at)} · ${esc(r.reason)}</span>
+        <span class="v amt ${r.amount > 0 ? 'plus' : ''}">${r.amount > 0 ? '+' : ''}${esc(r.amount)}</span>
       </div>`).join('');
   }
 

@@ -54,18 +54,25 @@ def issue_token(secret: str, user_id: int, kind: str = "access", epoch: int = 0)
     now = datetime.now(timezone.utc)
     life = (timedelta(hours=ACCESS_TOKEN_HOURS) if kind == "access"
             else timedelta(days=REFRESH_TOKEN_DAYS))
+    # jti: jetonun kendi kimliği; çıkışta tek bir oturumu geri almayı mümkün kılar.
     payload = {"sub": str(user_id), "typ": kind, "gen": int(epoch),
-               "iat": now, "exp": now + life}
+               "jti": secrets.token_urlsafe(12), "iat": now, "exp": now + life}
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
-def read_token(secret: str, token: str, kind: str = "access") -> tuple[int, int] | None:
-    """Geçerliyse (kullanıcı kimliği, oturum kuşağı), değilse None döndürür."""
+def read_claims(secret: str, token: str, kind: str = "access") -> dict | None:
+    """İmzası ve süresi geçerli, türü doğru jetonun içeriği; değilse None."""
     try:
         data = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.PyJWTError:
         return None
-    if data.get("typ") != kind:
+    return data if data.get("typ") == kind else None
+
+
+def read_token(secret: str, token: str, kind: str = "access") -> tuple[int, int] | None:
+    """Geçerliyse (kullanıcı kimliği, oturum kuşağı), değilse None döndürür."""
+    data = read_claims(secret, token, kind)
+    if data is None:
         return None
     try:
         return int(data["sub"]), int(data.get("gen", 0))

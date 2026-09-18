@@ -26,10 +26,10 @@ Tarayıcı `http://127.0.0.1:8765` adresinde otomatik açılır. Windows'ta `bas
 | 3. Birleştirme | Aynı makalenin DOI / PMID / PMCID kopyaları tek kayıtta toplanır |
 | 4. Zenginleştirme | OpenAlex'ten atıf sayısı, Unpaywall'dan ücretsiz PDF bağlantısı eklenir |
 | 5. Sıralama | Güncellik + kanıt düzeyi + atıf + erişilebilirlik puanı hesaplanır |
-| 6. Tam metin | En nitelikli makalelerin PubMed Central tam metni indirilip özete değil **makalenin tamamına** dayanan sentez yapılır |
-| 7. Sayısal çıkarım | Her makaleden etki büyüklüğü, güven aralığı, denek sayısı ve p değeri yapılandırılmış olarak çekilir (sentezle eş zamanlı çalışır, süre eklemez) |
 | 6. Triyaj | Her aday makale, soruyu gerçekten ele alıp almadığına göre 0-2 arası notlanır. Cevabın hangi güvenle yazılacağı bu sayıya bağlıdır |
-| 8. Doğrulama | Raporda geçen her PMID sonuç kümesiyle karşılaştırılır; her sayı kaynak metinde birebir aranır, bulunamayan bulgu elenir; Kısa Cevap'ın her cümlesi atıf verdiği makaleye karşı ayrıca sınanır |
+| 7. Tam metin | En nitelikli makalelerin PubMed Central tam metni indirilip özete değil **makalenin tamamına** dayanan sentez yapılır |
+| 8. Sayısal çıkarım | Her makaleden etki büyüklüğü, güven aralığı, denek sayısı ve p değeri yapılandırılmış olarak çekilir (sentezle eş zamanlı çalışır, süre eklemez) |
+| 9. Doğrulama | Raporda geçen her PMID sonuç kümesiyle karşılaştırılır; her sayı kaynak metinde birebir aranır, bulunamayan bulgu elenir; Kısa Cevap'ın her cümlesi atıf verdiği makaleye karşı ayrıca sınanır |
 
 Tarama sırasında **Cancel** düğmesi vardır. Arayüz anında serbest kalır, hat bir sonraki
 kontrol noktasında durur ve iptal edilen tarama geçmişe kaydedilmez.
@@ -46,9 +46,15 @@ sayısal sonuçlar tablo halinde görünür:
 
 Bu sayılar modele yazdırılmaz, doğrulanır:
 
-- Her değer, modele verilen kaynak metinde **birebir aranır**. Bulunamayan bulgu rapora girmez.
+- Her değer, modele verilen kaynak metinde **birebir aranır**, üstelik tek başına bir sayı
+  olarak: `1.3` değeri metindeki `61.3`'ün içinde bulunmuş sayılmaz. Bulunamayan bulgu
+  rapora girmez.
+- Güven aralığının iki sınırı da kaynakta aranır; biri bulunamazsa bulgu tamamen elenir
+  (aralıksız kalan değer, yön tablosunda sonucu yanlışlıkla "anlamlı" gösterirdi).
+  Kaynakta bulunmayan p değeri boşaltılır. `p<.001` yazımı `<0.001` ile eşleşir.
 - Metinde eksiyle geçen bir değerin işareti geri konur. Etki büyüklüğünde işaret hatası
-  klinik olarak yanıltıcıdır (`MD 136.03` ile `MD -136.03` zıt sonuçlardır).
+  klinik olarak yanıltıcıdır (`MD 136.03` ile `MD -136.03` zıt sonuçlardır). Solunda
+  rakam olan tire eksi değil aralık ayırıcısıdır: `12.4-15.8` içindeki `15.8` pozitiftir.
 - Oran ölçütlerinde (HR, OR, RR) güven aralığı sınırları negatif olamaz. Bazı dergiler
   aralığı `-0.69-0.95` gibi hatalı dizer; bu, ayırıcı tire olarak düzeltilir.
 - Ters sıralanmış sınırlar küçükten büyüğe çevrilir.
@@ -140,7 +146,8 @@ Tıbbi sorular birbirini çok tekrar eder. Aynı soru aynı ayarlarla geldiğind
 - Önbellekten gelen her sonuç arayüzde "reused from a search N hours ago" etiketiyle
   işaretlenir ve yanındaki **run it fresh** düğmesi taramayı baştan çalıştırır. Eski bir
   cevabın yeni sanılması tıbbi bir üründe kabul edilemez, bu yüzden etiket gizlenmez.
-- `GET /api/cache` isabet oranını verir, `DELETE /api/cache` önbelleği boşaltır.
+- Yönetici için `GET /api/admin/status` isabet oranını da verir, `DELETE /api/admin/cache`
+  önbelleği boşaltır.
   `CACHE_ENABLED=0` ile tamamen kapatılır.
 
 Ölçülen etki: aynı sorgunun ikinci çalışması 11 saniye yerine 0,0 saniye sürüyor ve sıfır
@@ -224,14 +231,20 @@ seçenekleri de vardır.
 pip install -r requirements.txt
 ```
 
-`.env.example` dosyasını `.env` olarak kopyalayıp doldurun:
+Proje kökünde bir `.env` dosyası oluşturup doldurun:
 
 - `NCBI_EMAIL` — zorunlu, NCBI kuralı
 - `NCBI_API_KEY` — **ücretsiz** ve şiddetle önerilir. PubMed hız limitini 3 istek/sn'den 10 istek/sn'ye
   çıkarır; anahtarsız kullanımda paralel taramalarda "429 Too Many Requests" hataları görülür.
   [account.ncbi.nlm.nih.gov/settings](https://account.ncbi.nlm.nih.gov/settings/) adresinden alınır.
 - `GEMINI_API_KEYS` — virgülle ayrılmış birden çok anahtar; biri kotayı doldurunca otomatik
-  sonrakine geçilir, hepsi biterse `GROQ_API_KEY` yedeği devreye girer.
+  sonrakine geçilir (her anahtar çağrı başına en fazla bir kez denenir), hepsi biterse
+  `GEMINI_FAST_MODEL` yedek modeline düşülür.
+- `DATABASE_URL` — verilirse Postgres'e bağlanılır, boşsa yerel SQLite dosyası (`history.db`)
+  kullanılır. **Dikkat:** yerelde canlı veritabanının adresini verirseniz yerel çalışma canlı
+  hesaplara ve kredilere yazar; açılışta bunun için uyarı basılır.
+- `BREVO_API_KEY`, `MAIL_FROM` — işlemsel e-posta. Boşsa e-postalar konsola yazılır.
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD` — yönetici hesabı yalnızca buradan tohumlanır.
 
 ## Proje yapısı
 
@@ -248,8 +261,10 @@ litrag/
   models.py             Makale modeli, birleştirme ve puanlama
   selection.py          Filtre doğrulama, konu örtüşmesi, kanıt kotalı seçim
   agreement.py          Çalışmalar arası yön uyuşması (model çağrısı yok)
-  mailer.py             İşlemsel e-posta (SMTP; sağlayıcıdan bağımsız)
-  store.py              SQLite geçmiş ve kütüphane
+  mailer.py             İşlemsel e-posta (Brevo HTTP API; arka planda gönderilir)
+  db.py                 Veritabanı katmanı: yerelde SQLite, canlıda Postgres
+  accounts.py           Hesaplar, kredi defteri ve arama başına kredi rezervasyonu
+  store.py              Arama geçmişi ve kütüphane
   cache.py              Arama önbelleği (normalleştirilmiş sorgu anahtarı, 7 gün)
   exporters.py          Word / RIS / BibTeX / Markdown / CSV
   pdf.py                PDF raporu (reportlab, gömülü DejaVu yazı tipi)

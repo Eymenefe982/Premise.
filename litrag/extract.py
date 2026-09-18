@@ -100,24 +100,63 @@ def _parse_json(raw: str) -> dict:
 
 
 # --------------------------------------------------------------- doğrulama
+def _positions(number: str, haystack: str) -> list[int]:
+    """Sayının metinde tek başına geçtiği konumlar.
+
+    Başka bir sayının parçası olan eşleşme sayılmaz: "1.3", "61.3" ya da "1.35"
+    içinde bulunmuş sayılmaz. Önceden düz alt dize aranıyordu ve metinde hiç geçmeyen
+    bir değer, benzeyen bir sayının içinde "doğrulanmış" oluyordu."""
+    pattern = rf"(?<![\d.]){re.escape(number)}(?!\d|\.\d)"
+    return [m.start() for m in re.finditer(pattern, haystack)]
+
+
 def _signed_value(value: str, haystack: str) -> str | None:
     """Sayıyı kaynak metinde arar. Metinde eksiyle geçiyorsa işareti geri koyar."""
     bare = value.lstrip("-").strip()
     if not bare:
         return None
 
-    positions = [m.start() for m in re.finditer(re.escape(bare), haystack)]
+    positions = _positions(bare, haystack)
     if not positions:
         return None
 
-    # Sayının hemen öncesinde eksi var mı; tüm geçişlerde varsa değer negatiftir
     def is_negative(index: int) -> bool:
-        prefix = haystack[max(0, index - 2):index].strip()
-        return prefix.endswith("-")
+        """Sayının önünde eksi var mı. Tirenin solunda bir rakam varsa tire eksi değil
+        aralık ayırıcısıdır: "12.4-15.8" ya da "45 - 67" içindeki ikinci sayı pozitiftir."""
+        j = index - 1
+        while j >= 0 and haystack[j] == " ":
+            j -= 1
+        if j < 0 or haystack[j] != "-":
+            return False
+        k = j - 1
+        while k >= 0 and haystack[k] == " ":
+            k -= 1
+        return not (k >= 0 and haystack[k].isdigit())
 
+    # Tüm geçişlerde eksiyle yazılmışsa değer negatiftir
     if all(is_negative(i) for i in positions):
         return "-" + bare
     return bare
+
+
+# "95% CI", "95%CI:" gibi ön ekler aralığın sayılarından değildir
+_CI_PREFIX_RE = re.compile(r"^\s*(?:95\s*%\s*)?(?:ci|confidence interval)?\s*[:=]?\s*",
+                           re.IGNORECASE)
+
+
+def _numbers_in_source(text: str, haystack: str, allow_bare_decimal: bool = False) -> bool:
+    """Metindeki her sayı kaynakta tek başına geçiyor mu (en az bir sayı olmalı)."""
+    numbers = re.findall(r"\d+(?:\.\d+)?", text)
+    if not numbers:
+        return False
+    for number in numbers:
+        if _positions(number, haystack):
+            continue
+        # p değerleri çoğu dergide başındaki sıfır olmadan yazılır: p<.001
+        if allow_bare_decimal and number.startswith("0.") and _positions(number[1:], haystack):
+            continue
+        return False
+    return True
 
 
 def _fix_interval(ci: str, measure: str) -> str:
@@ -138,13 +177,26 @@ def _fix_interval(ci: str, measure: str) -> str:
 
 
 def _verify(finding: dict, haystack: str) -> dict | None:
-    """Kaynak metinde doğrulanamayan bulguyu eler, doğrulananın işaretini düzeltir."""
+    """Kaynak metinde doğrulanamayan bulguyu eler, doğrulananın işaretini düzeltir.
+
+    Güven aralığının iki sınırı da kaynakta aranır; bulunamazsa bulgu tamamen elenir.
+    Yalnız aralığı silip değeri bırakmak tehlikeli olurdu: yön tablosu aralık yokken
+    sonucu "anlamlı" sayar (bkz. agreement.direction). Kaynakta bulunmayan p değeri
+    ise yalnızca boşaltılır; değer ve aralık doğrulanmışsa bulgu kullanılabilir kalır."""
     corrected = _signed_value(_normalize(finding["value"]).replace(",", "."), haystack)
     if corrected is None:
         return None
     finding["value"] = corrected
     if finding.get("ci"):
-        finding["ci"] = _fix_interval(finding["ci"], finding.get("measure", ""))
+        ci = _fix_interval(_CI_PREFIX_RE.sub("", finding["ci"]), finding.get("measure", ""))
+        if not re.search(r"\d", ci):
+            ci = ""                          # "not reported" gibi: aralık değil
+        elif not _numbers_in_source(ci, haystack):
+            return None
+        finding["ci"] = ci
+    p = _normalize(finding.get("p") or "")
+    if re.search(r"\d", p) and not _numbers_in_source(p, haystack, allow_bare_decimal=True):
+        finding["p"] = ""
     return finding
 
 

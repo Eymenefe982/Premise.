@@ -11,7 +11,11 @@ from datetime import datetime
 
 from . import db
 
-_lock = threading.Lock()
+# Yeniden girilebilir: `save_report` ve `cache.put` bu kilidi tutarken `conn()`
+# çağırır; ilk çağrıda `conn()` şemayı kurmak için aynı kilidi ister. Düz Lock'la
+# bu, veritabanına ilk dokunan işlem kilidin altındaysa sonsuza kadar kilitleniyordu
+# (ör. `CACHE_ENABLED=0 py cli.py ...`).
+_lock = threading.RLock()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS searches (

@@ -9,6 +9,16 @@
       ],
       "port": 8765,
       "autoPort": true
+    },
+    {
+      "name": "premise-sandbox",
+      "runtimeExecutable": "py",
+      "runtimeArgs": [
+        "-c",
+        "import os, sys, runpy, tempfile; os.environ.update(DATABASE_URL='', LITRAG_DB=os.path.join(tempfile.gettempdir(), 'premise-sandbox.db'), OPEN_BROWSER='0', ADMIN_EMAIL='', ADMIN_PASSWORD='', PORT=os.environ.get('PORT', '8766')); sys.argv = ['app.py']; runpy.run_path('app.py', run_name='__main__')"
+      ],
+      "port": 8766,
+      "autoPort": true
     }
   ]
 }

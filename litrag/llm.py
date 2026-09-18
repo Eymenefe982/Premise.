@@ -4,21 +4,25 @@ from __future__ import annotations
 import json
 import re
 import threading
-import time
 import warnings
 
 warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
 warnings.filterwarnings("ignore", message=".*google.generativeai.*")
 
 import google.generativeai as genai  # noqa: E402
+from google.generativeai import client as genai_client  # noqa: E402
 
 from . import modes  # noqa: E402
 from .config import GEMINI_API_KEYS, GEMINI_FAST_MODEL  # noqa: E402
 
+# Son çalışan anahtar. Yeni çağrılar buradan başlar; kotası dolan anahtar bir sonrakine
+# devreder ve havuz bir çağrıda en fazla bir kez dolaşılır.
 _key_index = 0
-# genai.configure() süreç genelinde çalışır; eşzamanlı aramalar birbirinin anahtarını
-# değiştirebilirdi. Anahtar seçimi ile çağrı bu kilidin altında birlikte yapılır.
+# genai.configure() süreç genelindedir; yalnızca anahtara bağlı istemcinin üretimi bu
+# kilidin altında yapılır. Ağ çağrısının kendisi kilidin dışındadır: önceden kilit çağrı
+# boyunca tutuluyor, bütün kullanıcıların bütün model çağrıları sıraya giriyordu.
 _api_lock = threading.Lock()
+_clients: dict[str, object] = {}
 
 if GEMINI_API_KEYS:
     genai.configure(api_key=GEMINI_API_KEYS[0])
@@ -28,14 +32,15 @@ class LLMError(RuntimeError):
     pass
 
 
-def _switch_key() -> None:
-    """Kota dolunca havuzdaki bir sonraki Gemini anahtarına geçer."""
-    global _key_index
-    _key_index += 1
-    if _key_index >= len(GEMINI_API_KEYS):
-        raise LLMError("All Gemini keys in the pool are out of quota.")
-    genai.configure(api_key=GEMINI_API_KEYS[_key_index])
-    print(f"[llm] quota hit, switched to Gemini key #{_key_index + 1}")
+def _client_for(key: str):
+    """Anahtara bağlı, iş parçacıkları arasında paylaşılabilen istemci (anahtar başına bir)."""
+    with _api_lock:
+        cli = _clients.get(key)
+        if cli is None:
+            genai.configure(api_key=key)
+            cli = genai_client.get_default_generative_client()
+            _clients[key] = cli
+        return cli
 
 
 def _is_quota_error(exc: Exception) -> bool:
@@ -73,28 +78,35 @@ def _response_text(response) -> str:
 
 
 def _generate_with_model(model_name: str, prompt: str, system: str, config: dict):
-    """Verilen modeli, havuzdaki her anahtarla kota bitene kadar dener."""
-    global _key_index
+    """Verilen modeli havuzdaki anahtarlarla dener; her anahtar en fazla bir kez.
 
-    while GEMINI_API_KEYS:
+    Önceki sürüm her turda ilk anahtara dönüyordu: ilk anahtarın günlük kotası
+    dolduğunda diğerleri hiç denenmiyor, döngü sonsuza kadar sürüyordu. Hepsi
+    doluysa None döner ve çağıran yedek modele geçer.
+    """
+    global _key_index
+    count = len(GEMINI_API_KEYS)
+    start = _key_index % count if count else 0
+
+    for step in range(count):
+        index = (start + step) % count
         try:
-            with _api_lock:
-                _key_index = 0
-                genai.configure(api_key=GEMINI_API_KEYS[0])
-                model = genai.GenerativeModel(model_name=model_name,
-                                              system_instruction=system or None)
-                return model.generate_content(prompt, generation_config=config)
+            model = genai.GenerativeModel(model_name=model_name,
+                                          system_instruction=system or None)
+            # Modeli anahtarın kendi istemcisine bağla: çağrı sırasında başka bir
+            # iş parçacığı genai.configure() çağırsa bile bu model etkilenmez.
+            model._client = _client_for(GEMINI_API_KEYS[index])
+            response = model.generate_content(prompt, generation_config=config)
         except Exception as exc:
             if _is_quota_error(exc):
-                try:
-                    with _api_lock:
-                        _switch_key()
-                    time.sleep(1.2)
-                    continue
-                except LLMError:
-                    return None
+                if step + 1 < count:
+                    print(f"[llm] quota hit on Gemini key #{index + 1}, "
+                          f"trying key #{(index + 1) % count + 1}")
+                continue
             print(f"[llm] Gemini error ({model_name}): {exc}")
             return None
+        _key_index = index
+        return response
     return None
 
 
@@ -132,21 +144,26 @@ def generate(prompt: str, system: str = "", json_mode: bool = False,
 
 # --------------------------------------------------------------------------- çeviri
 TRANSLATE_SYSTEM = """You are a biomedical search strategist.
-The user writes a clinical or research question, often in Turkish.
+The user writes a clinical or research question in any language (often Turkish).
 Return ONLY a JSON object with this exact schema:
 {"english": "plain English version of the question",
  "academic": "concise academic phrasing",
  "pubmed_query": "a valid PubMed boolean query using MeSH terms, AND/OR and quotes",
  "mesh": ["MeSH term", "..."],
- "topic": "3-6 word short title of the topic in the user's own language"}
+ "topic": "3-6 word short title of the topic in {topic_language}"}
 Keep pubmed_query broad enough to return results: 2-4 concepts maximum."""
 
 
-def translate_query(query: str) -> dict:
+def translate_query(query: str, language: str | None = None) -> dict:
+    """`language` raporun dilidir. Başlık (sonuç başlığı ve dışa aktarılan dosyanın adı)
+    o dilde yazılır; verilmezse sorunun kendi dilinde. Önceden model "sorular çoğunlukla
+    Türkçe" ipucuna uyup İngilizce bir soruya bile Türkçe başlık veriyordu."""
     fallback = {"original": query, "english": query, "academic": query,
                 "pubmed_query": query, "mesh": [], "topic": query[:60]}
+    system = TRANSLATE_SYSTEM.replace(
+        "{topic_language}", language or "the same language the question is written in")
     try:
-        raw = generate(query, system=TRANSLATE_SYSTEM, json_mode=True, stage="translate")
+        raw = generate(query, system=system, json_mode=True, stage="translate")
         data = json.loads(raw)
         return {
             "original": query,
@@ -193,10 +210,22 @@ def triage(question: str, articles: list) -> int:
 
     try:
         raw = generate(prompt, system=TRIAGE_SYSTEM, json_mode=True, stage="triage")
-        data = json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE))
     except Exception as exc:
         print(f"[llm] triage failed: {exc}")
         return 0
+    try:
+        data = json.loads(re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE))
+    except ValueError:
+        # Çıktı sınırına takılan yanıt JSON'un ortasında kesilir (düşük modda 20 aday
+        # 600 token'ı aşabiliyor). Önceden bu, triyajı sessizce tamamen kapatıyordu;
+        # tamamlanmış notlar kurtarılır, kalan makaleler kelime örtüşmesine düşer.
+        items = [{"pmid": pmid, "relevance": int(grade)} for pmid, grade in re.findall(
+            r'"pmid"\s*:\s*"([^"]+)"\s*,\s*"relevance"\s*:\s*(\d)', raw)]
+        if not items:
+            print("[llm] triage failed: unreadable response")
+            return 0
+        print(f"[llm] triage response was cut off, {len(items)} grade(s) recovered")
+        data = {"articles": items}
 
     by_pmid = {(a.pmid or a.pmcid): a for a in articles}
     graded = 0

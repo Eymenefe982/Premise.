@@ -52,7 +52,20 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
     used_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tokens_user ON auth_tokens(user_id, kind);
+CREATE TABLE IF NOT EXISTS credit_holds (
+    job_id TEXT PRIMARY KEY,           -- aramanın iş kimliği
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,           -- rezerve edilen kredi
+    instance TEXT NOT NULL,            -- rezervasyonu yapan sunucu süreci
+    created_at TEXT NOT NULL
+);
 """
+
+# Bu sürecin kimliği. Açılışta başka bir süreçten kalan rezervasyonlar sahipsiz sayılır:
+# işler bellekte tutulduğu için o aramaların sonucu hiçbir zaman gelmeyecek.
+INSTANCE_ID = secrets.token_hex(6)
+# Bundan eski rezervasyon, hangi süreçten gelirse gelsin serbest bırakılır.
+HOLD_MAX_AGE = timedelta(minutes=30)
 
 
 def _now() -> str:
@@ -158,10 +171,28 @@ def authenticate(email: str, password: str) -> dict | None:
             set_password(user["id"], password)
     elif not _redeem_temp_password(user["id"], password):
         return None
+    return _mark_login(user["id"])
+
+
+def authenticate_temp_only(email: str, password: str) -> dict | None:
+    """Yalnızca e-postayla gönderilen geçici şifreyi kabul eder.
+
+    Hesap başarısız denemeler yüzünden kilitliyken kullanılır. Kilit, başkası
+    şifre tahmin etmesin diye vardır; ama saldırgan kurbanın hesabını kasıtlı olarak
+    kilitleyip onu dışarıda bırakabiliyordu ("şifremi unuttum" da aynı kapıdan
+    geçtiği için kurtuluş yolu yoktu). Geçici şifre 96 bit rastgeledir ve yalnız hesap
+    sahibinin gelen kutusuna gider: kilitliyken kabul etmek tahmin kapısını açmaz."""
+    user = by_email(email)
+    if not user or not _redeem_temp_password(user["id"], password):
+        return None
+    return _mark_login(user["id"])
+
+
+def _mark_login(user_id: int) -> dict | None:
     with _lock:
-        conn().execute("UPDATE users SET last_login_at = ? WHERE id = ?", (_now(), user["id"]))
+        conn().execute("UPDATE users SET last_login_at = ? WHERE id = ?", (_now(), user_id))
         conn().commit()
-    return by_id(user["id"])
+    return by_id(user_id)
 
 
 def bump_session_epoch(user_id: int) -> None:
@@ -333,12 +364,17 @@ def max_cost_of(req) -> int:
     return meter.credits_for(modes.profile(getattr(req, "power_mode", None)).ceiling_try)
 
 
-def reserve(user_id: int, amount: int) -> bool:
+def reserve(user_id: int, amount: int, hold_id: str | None = None) -> bool:
     """Aramaya başlamadan krediyi bloke eder. Yetmiyorsa False döner.
 
     Bakiyeyi okuyup sonra düşmek yarış durumu yaratır: eşzamanlı iki arama aynı bakiyeyi
     görüp ikisi de kontrolü geçer ve hesap eksiye düşer. Okuma ve düşme tek kilidin
     altında yapılır; gerçek maliyet belli olunca `settle` farkı geri verir.
+
+    `hold_id` verilirse rezervasyon `credit_holds` tablosuna da yazılır. Arama işleri
+    bellekte tutulduğu için sunucu yeniden başlarsa `settle` hiç çalışmaz; kayıt olmadan
+    rezerve edilen kredi (high modda hesabın tamamı) kalıcı olarak kaybolurdu.
+    Sahipsiz kalan rezervasyonları `release_stale_holds` iade eder.
     """
     user = by_id(user_id)
     if user is None:
@@ -357,36 +393,87 @@ def reserve(user_id: int, amount: int) -> bool:
             return False
         conn().execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?",
                        (amount, user_id))
+        if hold_id:
+            conn().execute(
+                "INSERT INTO credit_holds (job_id, user_id, amount, instance, created_at)"
+                " VALUES (?,?,?,?,?)", (hold_id, user_id, amount, INSTANCE_ID, _now()))
         conn().commit()
     return True
 
 
+# Kullanılan krediyi sıfırın altına düşürmeden artırır/azaltır. Alt sınır CASE ile
+# SQL'de uygulanır: SQLite'ın iki argümanlı MAX(a, b)'sinin Postgres'te karşılığı yok
+# (orada MAX bir toplama fonksiyonudur), CASE ise ikisinde de aynı çalışır. Tek ifade
+# olduğu için başka bir sürecin eşzamanlı güncellemesi de kaybolmaz.
+_ADJUST_USED = ("UPDATE users SET credits_used = CASE WHEN credits_used + ? < 0 THEN 0"
+                " ELSE credits_used + ? END WHERE id = ?")
+
+
+def _adjust_used(user_id: int, delta: int) -> None:
+    conn().execute(_ADJUST_USED, (delta, delta, user_id))
+
+
 def settle(user_id: int, reserved: int, actual: int, reason: str,
-           report_id: int | None = None) -> int:
+           report_id: int | None = None, hold_id: str | None = None) -> int:
     """Rezerve edilen krediyi gerçek maliyete indirir ve deftere tek satır yazar.
 
     `actual` sıfır olabilir: iptal edilen, hata veren ya da cevap üretilemeyen arama
     ücretlendirilmez, rezervasyon tamamen geri verilir.
+
+    `hold_id`'nin kaydı artık yoksa rezervasyon `release_stale_holds` tarafından zaten
+    iade edilmiştir; o durumda iade tekrarlanmaz, yalnızca gerçek maliyet düşülür.
+    Kaydı silen taraf (bu fonksiyon ya da serbest bırakma) iadeyi yapan taraftır:
+    silme veritabanında tek seferlik olduğu için iade asla iki kez yapılmaz.
     """
     actual = max(0, actual)
     user = by_id(user_id)
     if user is None:
         return 0
     with _lock:
-        if not is_unlimited(user) and reserved != actual:
-            # Alt sınır SQL'de değil burada uygulanır: SQLite'ın iki argümanlı
-            # MAX(a, b) fonksiyonunun Postgres'te karşılığı yok (orada MAX bir
-            # toplama fonksiyonudur). Okuma ve yazma zaten aynı kilidin altında.
-            row = conn().execute("SELECT credits_used FROM users WHERE id = ?",
-                                 (user_id,)).fetchone()
-            used = max(0, int(row["credits_used"] or 0) + (actual - reserved)) if row else 0
-            conn().execute("UPDATE users SET credits_used = ? WHERE id = ?", (used, user_id))
+        delta = actual - reserved
+        if hold_id:
+            released = conn().execute("DELETE FROM credit_holds WHERE job_id = ?",
+                                      (hold_id,)).rowcount
+            if not released and not is_unlimited(user):
+                delta = actual
+        if not is_unlimited(user) and delta:
+            _adjust_used(user_id, delta)
         if actual:
             conn().execute(
                 "INSERT INTO credit_ledger (user_id, created_at, amount, reason, report_id)"
                 " VALUES (?,?,?,?,?)", (user_id, _now(), -actual, reason, report_id))
         conn().commit()
     return actual
+
+
+def release_stale_holds() -> int:
+    """Sonucu hiç gelmeyecek rezervasyonların kredisini iade eder.
+
+    Başka bir süreçten kalanlar (sunucu yeniden başladı ya da yeni sürüm yayına alındı)
+    ve `HOLD_MAX_AGE`'den eski olanlar serbest bırakılır. Eski süreç aramayı yine de
+    bitirirse `settle` kaydı bulamaz ve yalnızca gerçek maliyeti düşer; bakiye her iki
+    sırada da doğru kalır.
+    """
+    cutoff = (datetime.now() - HOLD_MAX_AGE).strftime("%Y-%m-%d %H:%M:%S")
+    rows = conn().execute(
+        "SELECT job_id, user_id, amount, created_at FROM credit_holds"
+        " WHERE instance <> ? OR created_at < ?", (INSTANCE_ID, cutoff)).fetchall()
+    released = 0
+    for row in rows:
+        with _lock:
+            if not conn().execute("DELETE FROM credit_holds WHERE job_id = ?",
+                                  (row["job_id"],)).rowcount:
+                continue                     # arama bu arada kendi hesabını kapattı
+            user = by_id(row["user_id"])
+            # Dönem o arada sıfırlandıysa rezerve edilen kredi yeni dönemin kullanımında
+            # değildir; iade etmek yeni döneme bedava kredi eklemek olurdu.
+            if user and user["period_start"] <= row["created_at"]:
+                _adjust_used(row["user_id"], -int(row["amount"]))
+            conn().commit()
+        released += 1
+    if released:
+        print(f"  [accounts] {released} orphaned credit reservation(s) released")
+    return released
 
 
 def charge(user_id: int, amount: int, reason: str, report_id: int | None = None) -> None:
@@ -464,6 +551,30 @@ def consume_auth_token(raw: str, kind: str) -> int | None:
                        (_now(), fingerprint))
         conn().commit()
     return int(row["user_id"])
+
+
+def revoke_session_token(user_id: int, jti: str, expires_ts: int) -> None:
+    """Çıkış yapılan oturumun yenileme jetonunu süresi dolana kadar geçersiz kılar.
+
+    JWT kendi başına geri alınamaz: çıkışta yalnız çerez silinirse, çalınmış bir kopya
+    30 gün boyunca yeni oturum açmaya devam ederdi. Kayıt süresi dolunca
+    `purge_expired_tokens` tarafından temizlenir."""
+    expires = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
+    fingerprint = security.token_fingerprint("jti:" + jti)
+    with _lock:
+        if conn().execute("SELECT 1 FROM auth_tokens WHERE fingerprint = ?",
+                          (fingerprint,)).fetchone():
+            return
+        conn().execute(
+            "INSERT INTO auth_tokens (fingerprint, user_id, kind, expires_at)"
+            " VALUES (?,?,'revoked',?)", (fingerprint, user_id, expires))
+        conn().commit()
+
+
+def is_session_token_revoked(jti: str) -> bool:
+    return conn().execute(
+        "SELECT 1 FROM auth_tokens WHERE fingerprint = ? AND kind = 'revoked'",
+        (security.token_fingerprint("jti:" + jti),)).fetchone() is not None
 
 
 def purge_expired_tokens() -> int:

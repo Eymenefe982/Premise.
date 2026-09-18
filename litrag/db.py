@@ -105,6 +105,17 @@ class Database:
         import psycopg
         return isinstance(exc, (psycopg.OperationalError, psycopg.InterfaceError))
 
+    @staticmethod
+    def _is_missing_id_column(exc: Exception) -> bool:
+        """`RETURNING id` eklenen tabloda id sütunu yok mu?
+
+        Yalnız bu hata tabloyu "id'siz" diye işaretleyebilir. Önceden her hata
+        işaretliyordu: tek bir mükerrer kayıt denemesi (UniqueViolation) `users`'ı,
+        NUL karakterli tek bir sorgu (DataError) `reports`'u kalıcı olarak id'siz
+        sayıyor, sonraki bütün kayıtlar ve aramalar `int(None)` ile çöküyordu."""
+        import psycopg
+        return isinstance(exc, psycopg.errors.UndefinedColumn)
+
     # -------------------------------------------------------------- sorgular
     def execute(self, sql: str, params: tuple | list = ()) -> _Cursor:
         if self.backend == "sqlite":
@@ -123,12 +134,16 @@ class Database:
         wants_id = (bool(_INSERT_RE.match(sql)) and not _RETURNING_RE.search(sql)
                     and _table_of(sql) not in self._no_id_tables)
         reconnected = False
+        # Postgres metin alanları NUL (0x00) taşıyamaz; psycopg bu değeri göndermeden
+        # reddeder. Dışarıdan gelen metinde (kullanıcı sorusu, dergi kaydı) bulunursa
+        # istek çökmesin diye burada atılır. SQLite'ta davranış değişmez.
+        params = tuple(p.replace("\x00", "") if isinstance(p, str) else p for p in params)
 
         while True:
             statement = (base.rstrip().rstrip(";") + " RETURNING id") if wants_id else base
             try:
                 cursor = self._conn.cursor()
-                cursor.execute(statement, tuple(params))
+                cursor.execute(statement, params)
                 break
             except Exception as exc:
                 # Bağlantı hatası önce gelir: yoksa kopmuş bağlantıyı "id sütunu yok"
@@ -138,7 +153,7 @@ class Database:
                     reconnected = True
                     self._connect()
                     continue
-                if wants_id:
+                if wants_id and self._is_missing_id_column(exc):
                     self._no_id_tables.add(_table_of(sql))
                     wants_id = False
                     continue

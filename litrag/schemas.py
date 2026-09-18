@@ -98,6 +98,14 @@ class SearchIn(BaseModel):
     refresh: bool = False
     power_mode: Literal[POWER_MODES] = "medium"   # type: ignore[valid-type]
 
+    @field_validator("query", "author", "journal")
+    @classmethod
+    def no_nul(cls, v: str) -> str:
+        # NUL karakteri hiçbir gerçek soruda yoktur; Postgres metin alanına da yazılamaz.
+        if "\x00" in v:
+            raise ValueError("The text contains an invalid character.")
+        return v
+
     @field_validator("filters")
     @classmethod
     def known_filters(cls, v: list[str]) -> list[str]:

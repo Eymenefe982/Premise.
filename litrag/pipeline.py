@@ -179,7 +179,7 @@ def _run_search(req: SearchRequest, progress=None, cancel=None) -> dict:
     # 1) Sorguyu akademik arama diline çevir
     checkpoint()
     progress("Translating your question into academic search terms", 0.06)
-    tr = translate_query(req.query)
+    tr = translate_query(req.query, req.language)
     checkpoint()
     variants = list(dict.fromkeys([v for v in (tr["pubmed_query"], tr["academic"],
                                                tr["english"], tr["original"]) if v]))[:3]
