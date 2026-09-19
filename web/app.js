@@ -2,6 +2,10 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+/* Arayüz metinleri i18n.js'te; burada yalnız kısaltması durur. Sayfadaki sabit metinler
+   data-i18n ile işaretli, aşağıdakiler ise çalışma anında üretilenler. */
+const t = (key, vars) => window.I18N.t(key, vars);
+
 const state = {
   result: null,
   filters: new Set(),
@@ -50,7 +54,10 @@ function toast(message) {
 $("#toggle-advanced").addEventListener("click", (e) => {
   const panel = $("#advanced");
   panel.hidden = !panel.hidden;
-  e.target.textContent = panel.hidden ? "Advanced ⌄" : "Advanced ⌃";
+  // data-i18n'i de güncelle: dil değişirse doğru hâli (açık/kapalı) yeniden uygulansın.
+  const key = panel.hidden ? "filter.advancedOpen" : "filter.advancedShut";
+  e.target.setAttribute("data-i18n", key);
+  e.target.textContent = t(key);
 });
 
 $$("#quick-filters .chip[data-filter]").forEach((chip) => {
@@ -77,26 +84,39 @@ $$("#power-modes .power").forEach((btn) => {
   });
 });
 
+/* Modun özellik listesi sunucudan hazır metin olarak gelmez, buradaki sayılardan
+   kurulur: arayüz iki dilli, sunucu ise tek dilde düzyazı gönderiyordu. Sayılar
+   profilden geldiği için bir knob değişince açıklama da onunla değişir. */
+function modeFeatures(info) {
+  const items = [t("mode.feat.screens", { triage: info.triage, articles: info.articles })];
+  items.push(info.fulltext
+    ? t("mode.feat.fulltext", { n: info.fulltext })
+    : t("mode.feat.abstracts"));
+  if (info.extract) items.push(t("mode.feat.extract"));
+  if (info.tables) items.push(t("mode.feat.tables"));
+  items.push(t("mode.feat.guards"));
+  return items;
+}
+
 function renderPowerModes() {
   $$("#power-modes .power").forEach((btn) => {
     const mode = btn.dataset.mode;
     const info = state.modeCosts[mode];
     btn.setAttribute("aria-pressed", String(mode === state.powerMode));
     const cost = btn.querySelector(".power-cost");
-    if (cost) cost.textContent = info ? `≈ ${info.estimate} credits` : "";
-    if (info && info.label) btn.querySelector(".power-label").textContent = info.label;
+    if (cost) cost.textContent = info ? t("mode.estimate", { n: info.estimate }) : "";
+    btn.querySelector(".power-label").textContent = t("mode." + mode + ".label");
   });
   const active = state.modeCosts[state.powerMode];
   const detail = $("#power-detail");
   if (detail) {
     detail.hidden = !active;
     if (active) {
-      $("#power-use").textContent = active.use_case || active.summary;
-      $("#power-features").innerHTML = (active.features || [])
+      $("#power-use").textContent = t("mode." + state.powerMode + ".use");
+      $("#power-features").innerHTML = modeFeatures(active)
         .map((f) => `<li>${esc(f)}</li>`).join("");
       $("#power-hint").textContent =
-        `About ${active.estimate} credits per search. At most ${active.max} are held `
-        + `while it runs; you are charged only what the search actually costs.`;
+        t("mode.hint", { estimate: active.estimate, max: active.max });
     }
   }
 
@@ -115,8 +135,8 @@ function renderPowerModes() {
     const off = active.fulltext === 0;
     ft.closest(".switch").classList.toggle("switch-muted", off);
     ft.closest(".switch").title = off
-      ? "Low power answers from abstracts only; full text is not read."
-      : `Up to ${active.fulltext} full texts are read in this mode.`;
+      ? t("mode.fulltextOff")
+      : t("mode.fulltextOn", { n: active.fulltext });
   }
 }
 
@@ -163,15 +183,15 @@ async function runSearch(options = {}) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const detail = typeof data.detail === "string" ? data.detail
-        : Array.isArray(data.detail) ? (data.detail[0]?.msg || "Server error")
-        : "Server error";
+        : Array.isArray(data.detail) ? (data.detail[0]?.msg || t("errors.server"))
+        : t("errors.server");
       throw new Error(detail);
     }
     const { job_id, estimated_credits, reserved_credits } = await res.json();
     const costNote = $("#progress-cost");
     if (costNote && estimated_credits != null) {
-      costNote.textContent = `≈ ${estimated_credits} credits expected · `
-        + `${reserved_credits} held until the final cost is known`;
+      costNote.textContent = t("search.expected", { n: estimated_credits })
+        + t("search.held", { n: reserved_credits });
     }
     state.jobId = job_id;
     listen(job_id);
@@ -188,19 +208,19 @@ function startProgress() {
   $("#progress-steps").innerHTML = "";
   $("#progress-bar").style.width = "2%";
   $("#progress-pct").textContent = "0%";
-  $("#progress-msg").textContent = "Starting…";
+  $("#progress-msg").textContent = t("progress.starting");
   $("#progress-cost").textContent = "";
   $("#cancel-btn").disabled = false;
-  $("#cancel-btn").textContent = "Cancel";
+  $("#cancel-btn").textContent = t("common.cancel");
   $("#search-btn").disabled = true;
-  $("#search-btn").querySelector(".btn-label").textContent = "Searching…";
+  $("#search-btn").querySelector(".btn-label").textContent = t("search.searching");
   $("#progress").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function endProgress() {
   $("#progress").hidden = true;
   $("#search-btn").disabled = false;
-  $("#search-btn").querySelector(".btn-label").textContent = "Search";
+  $("#search-btn").querySelector(".btn-label").textContent = t("search.button");
   state.jobId = null;
   if (state.eventSource) {
     state.eventSource.close();
@@ -213,7 +233,7 @@ $("#cancel-btn").addEventListener("click", async () => {
   if (!state.jobId) return;
   const jobId = state.jobId;
   $("#cancel-btn").disabled = true;
-  $("#cancel-btn").textContent = "Cancelling…";
+  $("#cancel-btn").textContent = t("progress.cancelling");
   try {
     await fetch(`/api/cancel/${jobId}`, { method: "POST" });
   } catch {
@@ -252,7 +272,7 @@ function listen(jobId) {
   source.onerror = () => {
     if (!state.jobId) return;          // we closed it ourselves after a cancel
     endProgress();
-    showError("Lost connection to the server.");
+    showError(t("errors.lost"));
   };
 }
 
@@ -288,7 +308,7 @@ function renderLine(line) {
     const claimId = state.claims.length;
     state.claims.push({ text: sentence.replace(/\[PMID:[^\]]*\]/g, "").trim(), pmids });
     return `<span class="claim">${html}<button class="src-btn" data-claim="${claimId}"
-              title="Show the source passage behind this sentence" aria-label="Show source">
+              title="${esc(t("drawer.showTitle"))}" aria-label="${esc(t("drawer.show"))}">
               <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor"
                    stroke-width="2.2"><path d="M4 6h16M4 12h10M4 18h7"/></svg></button></span>`;
   }).join(" ");
@@ -375,10 +395,10 @@ function passagesFor(pmid) {
   if (article?.abstract) {
     splitSentences(article.abstract).forEach((s) => push(s, "Abstract"));
   }
-  let section = "Full text";
+  let section = t("drawer.fullText");
   for (const line of excerpt.split("\n")) {
     const heading = line.match(/^##\s+(.*)$/);
-    if (heading) { section = heading[1].trim() || "Full text"; continue; }
+    if (heading) { section = heading[1].trim() || t("drawer.fullText"); continue; }
     splitSentences(line).forEach((s) => push(s, section));
   }
   return blocks;
@@ -461,14 +481,14 @@ function openDrawer(claimId) {
                     <p>${highlight(p, claim.text)}</p>
                   </blockquote>`;
         }).join("")
-      : `<p class="drawer-empty">No stored passage matched this sentence closely.
-           ${hasFullText ? "" : "Only the abstract is stored for this article, so the claim may rest on text we did not keep."}
-           Open the article to check it yourself.</p>`;
+      : `<p class="drawer-empty">${esc(t("drawer.noMatch"))}
+           ${hasFullText ? "" : esc(t("drawer.abstractOnly"))}
+           ${esc(t("drawer.openArticle"))}</p>`;
 
     return `<section class="drawer-article">
               <h4>${esc(article?.title || "PMID " + pmid)}</h4>
               <p class="drawer-meta">${esc(article?.journal || "")} ${esc(article?.year || "")} ·
-                 ${hasFullText ? "abstract and full text searched" : "abstract searched"}</p>
+                 ${esc(t(hasFullText ? "drawer.searchedBoth" : "drawer.searchedAbstract"))}</p>
               <div class="drawer-links">${links}</div>
               ${body}
             </section>`;
@@ -504,16 +524,16 @@ function statBadges(a) {
     a.year ? `<span class="badge">${esc(a.year)}</span>` : "",
     a.sample_size ? `<span class="badge badge-n">n = ${Number(a.sample_size).toLocaleString("en-US")}</span>` : "",
     a.citations ? `<span class="badge">${esc(a.citations)} citations</span>` : "",
-    a.is_oa || a.pmcid ? '<span class="badge badge-oa">Free full text</span>' : "",
+    a.is_oa || a.pmcid ? `<span class="badge badge-oa">${esc(t("badge.freeFulltext"))}</span>` : "",
     a.fulltext_used
-      ? '<span class="badge badge-ft" title="The synthesis draws on this article\'s full text">Full text read</span>'
-      : '<span class="badge badge-abs" title="Only the abstract was read from this article; abstracts can overstate the result">Abstract only</span>',
+      ? `<span class="badge badge-ft" title="${esc(t("badge.fulltextTitle"))}">${esc(t("badge.fulltext"))}</span>`
+      : `<span class="badge badge-abs" title="${esc(t("badge.abstractTitle"))}">${esc(t("badge.abstract"))}</span>`,
     a.filter_status === "mismatch"
-      ? '<span class="badge badge-off" title="This record does not match your chosen publication-type filter">Off filter</span>' : "",
+      ? `<span class="badge badge-off" title="${esc(t("badge.offFilterTitle"))}">${esc(t("badge.offFilter"))}</span>` : "",
     a.filter_status === "unknown"
-      ? '<span class="badge badge-unk" title="This record has no publication-type data, so filter compliance could not be checked">Type unclear</span>' : "",
+      ? `<span class="badge badge-unk" title="${esc(t("badge.typeUnclearTitle"))}">${esc(t("badge.typeUnclear"))}</span>` : "",
     a.relevance === 1
-      ? '<span class="badge badge-rel" title="Related to the topic, but does not directly investigate your question">Indirect</span>' : "",
+      ? `<span class="badge badge-rel" title="${esc(t("badge.indirectTitle"))}">${esc(t("badge.indirect"))}</span>` : "",
   ].filter(Boolean).join("");
 }
 
@@ -546,7 +566,7 @@ function renderBibliography() {
   const withStats = items.filter((a) => a.findings && a.findings.length).length;
   const dropped = state.result?.dropped_findings || 0;
   box.innerHTML = `
-    <h3 class="bib-head">References and numeric findings</h3>
+    <h3 class="bib-head">${esc(t("bib.head"))}</h3>
     <p class="bib-note">
       Effect sizes, confidence intervals and p values were extracted from ${withStats} of these
       articles. Every number is copied verbatim from the source text and verified against it,
@@ -559,7 +579,7 @@ function renderBibliography() {
         <li class="bib-item">
           <a class="bib-title" href="${safeUrl(a.best_free_url || a.pubmed_url)}"
              target="_blank" rel="noopener">${esc(a.title)}</a>
-          <p class="bib-meta">${esc(a.authors || "Authors not listed in the record")}${a.journal ? " · " + esc(a.journal) : ""}</p>
+          <p class="bib-meta">${esc(a.authors || t("article.noAuthors"))}${a.journal ? " · " + esc(a.journal) : ""}</p>
           ${a.population ? `<p class="bib-pop">Population: ${esc(a.population)}</p>` : ""}
           <div class="badges">${statBadges(a)}</div>
           ${findingsTable(a)}
@@ -589,20 +609,16 @@ function renderEvidenceNotice(result) {
 
   const lines = [];
   if (result.answer_mode === "limited") {
-    lines.push(`<b>Limited answer.</b> Only ${result.relevant_count} article(s) directly
-      investigate your question, not enough to build a recommendation on. The report
-      therefore skips clinical inference and reports the studies one by one instead.`);
+    lines.push(t("evidence.limited", { n: result.relevant_count }));
   }
   if (result.low_evidence) {
-    lines.push(`<b>This answer rests on only ${n} article(s).</b> That is too few to answer
-      the question with confidence; do not base a clinical decision on it alone.`);
+    lines.push(t("evidence.low", { n }));
   }
   if (result.broadened) {
-    const what = { "date range": "date range",
-                   "publication type filters": "publication-type filters" };
+    const what = { "date range": t("evidence.relaxed.date"),
+                   "publication type filters": t("evidence.relaxed.type") };
     const names = (result.relaxed || []).map((r) => what[r] || r).join(" and ");
-    lines.push(`The initial search did not return enough results, so it was rerun with the
-      ${names} limit removed, so the list may include articles outside your original criteria.`);
+    lines.push(t("evidence.broadened", { names }));
   }
   if (off) {
     lines.push(`${off} article(s) in the list do not match your chosen publication-type filter
@@ -628,9 +644,8 @@ function noAnswerHtml(result) {
        unrelated articles, we stopped: an answer like that would look sourced and be more
        misleading because of it.
        <b>No credit was charged for this search.</b></p>
-    ${tips ? `<p>Things you could try:</p><ul>${tips}</ul>` : ""}
-    <p class="no-answer-foot">The search results are still on the <b>Articles</b> tab,
-       you can review them yourself.</p>
+    ${tips ? `<p>${esc(t("noAnswer.tips"))}</p><ul>${tips}</ul>` : ""}
+    <p class="no-answer-foot">${t("noAnswer.foot")}</p>
   </div>`;
 }
 
@@ -669,7 +684,7 @@ function renderAgreement(result) {
 
   const word = { decrease: "decrease", increase: "increase", null: "null" };
   box.innerHTML = `
-    <h3 class="bib-head">Where studies agree on direction</h3>
+    <h3 class="bib-head">${esc(t("agreement.head"))}</h3>
     <p class="bib-note">This table is independent of the synthesis: each row is computed from
       the effect size and confidence interval extracted verbatim from the articles. If the
       confidence interval crosses the point of no effect, the result counts as "null".</p>
@@ -744,7 +759,7 @@ function render(result) {
         `${result.fulltext_count} full texts read · ${statsPart}${chargePart}${result.elapsed} s · ` +
         `${result.generated_at}`) +
     (result.cached
-      ? ` <span class="cache-tag" title="This answer was reused from an identical search, so no new sources were fetched">reused from ${cacheAge(result)}</span>
+      ? ` <span class="cache-tag" title="${esc(t("badge.cachedTitle"))}">${esc(t("badge.cached", { age: cacheAge(result) }))}</span>
          <button class="link-btn" id="rerun-fresh">run it fresh</button>`
       : "");
 
@@ -756,7 +771,7 @@ function render(result) {
   $("#report").innerHTML = result.answer_mode === "none"
     ? noAnswerHtml(result)
     : (result.report ? markdown(result.report)
-                     : '<p class="empty">No synthesis was generated.</p>');
+                     : `<p class="empty">${esc(t("report.empty"))}</p>`);
   renderClaimFlags(result);
   renderTables(result);
   renderAgreement(result);
@@ -816,7 +831,7 @@ function renderArticles() {
   items.sort(sorters[state.sort]);
 
   if (!items.length) {
-    list.innerHTML = '<p class="empty">No article matches this filter.</p>';
+    list.innerHTML = `<p class="empty">${esc(t("article.noMatch"))}</p>`;
     return;
   }
 
@@ -826,14 +841,14 @@ function renderArticles() {
       <div class="card" data-index="${i}">
         <span class="card-score">${Number(a.score || 0).toFixed(1)}</span>
         <h4 class="card-title"><a href="${safeUrl(a.best_free_url)}" target="_blank" rel="noopener">${esc(a.title)}</a></h4>
-        <p class="card-authors">${esc(a.authors || "Authors not listed in the record")}</p>
+        <p class="card-authors">${esc(a.authors || t("article.noAuthors"))}</p>
         <div class="badges">${badges}</div>
         ${findingsTable(a)}
         <p class="card-abstract">${esc(a.abstract)}</p>
         <div class="card-actions">
-          <button class="link-btn" data-toggle="${i}">Show abstract</button>
+          <button class="link-btn" data-toggle="${i}">${esc(t("article.showAbstract"))}</button>
           ${articleLinks(a)}
-          <button class="link-btn" data-save="${i}" style="margin-left:auto">Save to library</button>
+          <button class="link-btn" data-save="${i}" style="margin-left:auto">${esc(t("article.save"))}</button>
         </div>
       </div>`;
   }).join("");
@@ -842,7 +857,7 @@ function renderArticles() {
     btn.addEventListener("click", () => {
       const card = btn.closest(".card");
       card.classList.toggle("open");
-      btn.textContent = card.classList.contains("open") ? "Hide abstract" : "Show abstract";
+      btn.textContent = t(card.classList.contains("open") ? "article.hideAbstract" : "article.showAbstract");
     }));
 
   list.querySelectorAll("[data-save]").forEach((btn) =>
@@ -853,7 +868,7 @@ function renderArticles() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ article }),
       }).then((r) => r.json());
-      toast(res.added ? "Saved to your library." : "Already in your library.");
+      toast(t(res.added ? "article.saved" : "article.already"));
       loadLibrary();
     }));
 }
@@ -866,8 +881,8 @@ function renderClinical(clinical) {
   if (chapters.length) {
     parts.push(`
       <div class="group">
-        <h3>StatPearls point-of-care chapters</h3>
-        <p>Continuously updated clinical summaries, free to read in full on NCBI Bookshelf.</p>
+        <h3>${esc(t("clinical.statpearls"))}</h3>
+        <p>${esc(t("clinical.statpearlsSub"))}</p>
         <div class="grid-2">
           ${chapters.map((c) => `
             <a class="res-card" href="${safeUrl(c.url)}" target="_blank" rel="noopener">
@@ -883,13 +898,13 @@ function renderClinical(clinical) {
   if (guidelines.length) {
     parts.push(`
       <div class="group">
-        <h3>Guidelines and Cochrane reviews</h3>
-        <p>Publications indexed in PubMed as practice guidelines, consensus statements or systematic reviews.</p>
+        <h3>${esc(t("clinical.guidelines"))}</h3>
+        <p>${esc(t("clinical.guidelinesSub"))}</p>
         <div class="grid-2">
           ${guidelines.map((g) => `
             <a class="res-card" href="${safeUrl(g.best_free_url || g.pubmed_url)}" target="_blank" rel="noopener">
               <b>${esc(g.title)}</b>
-              <small>${esc(g.journal)} ${esc(g.year)} · ${esc(g.evidence_label)}${g.is_oa ? " · free full text" : ""}</small>
+              <small>${esc(g.journal)} ${esc(g.year)} · ${esc(g.evidence_label)}${g.is_oa ? esc(t("clinical.freeFull")) : ""}</small>
               <span class="res-src">PubMed ${esc(g.pmid)}</span>
             </a>`).join("")}
         </div>
@@ -900,8 +915,8 @@ function renderClinical(clinical) {
   if (links.length) {
     parts.push(`
       <div class="group">
-        <h3>Open the same question elsewhere</h3>
-        <p>Clinical decision resources, pre-filled with your question. Subscription resources have a dashed border.</p>
+        <h3>${esc(t("clinical.elsewhere"))}</h3>
+        <p>${esc(t("clinical.elsewhereSub"))}</p>
         <div class="grid-2">
           ${links.map((l) => `
             <a class="res-card ${l.free ? "" : "locked"}" href="${safeUrl(l.url)}" target="_blank" rel="noopener">
@@ -913,30 +928,30 @@ function renderClinical(clinical) {
       </div>`);
   }
 
-  box.innerHTML = parts.join("") || '<p class="empty">No clinical resource found.</p>';
+  box.innerHTML = parts.join("") || `<p class="empty">${esc(t("clinical.none"))}</p>`;
 }
 
 function renderStrategy(tr, result) {
   $("#strategy-content").innerHTML = `
     <div class="strategy-block">
-      <h4>Your question</h4>
+      <h4>${esc(t("strategy.question"))}</h4>
       <code>${esc(result.query)}</code>
     </div>
     <div class="strategy-block">
-      <h4>PubMed query</h4>
+      <h4>${esc(t("strategy.pubmed"))}</h4>
       <code>${esc(tr.pubmed_query || "-")}</code>
     </div>
     <div class="strategy-block">
-      <h4>Academic phrasing</h4>
+      <h4>${esc(t("strategy.academic"))}</h4>
       <code>${esc(tr.academic || "-")}</code>
     </div>
     <div class="strategy-block">
-      <h4>MeSH terms</h4>
+      <h4>${esc(t("strategy.mesh"))}</h4>
       <div class="mesh-list">${(tr.mesh || []).map((m) => `<span class="badge">${esc(m)}</span>`).join("") || "-"}</div>
     </div>
     <div class="strategy-block">
-      <h4>Screening summary</h4>
-      <code>${result.pool_size} unique records screened, ${result.articles.length} articles selected, ${result.fulltext_count} full texts read.
+      <h4>${esc(t("strategy.screening"))}</h4>
+      <code>${esc(t("strategy.screeningText", { pool: result.pool_size, articles: result.articles.length, fulltext: result.fulltext_count }))}
 Sources: PubMed, Europe PMC, PubMed Central, OpenAlex, Unpaywall.</code>
     </div>`;
 }
@@ -974,7 +989,7 @@ $$("[data-export]").forEach((btn) =>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ report_id: state.result.report_id }),
       });
-      if (!res.ok) throw new Error("Export failed");
+      if (!res.ok) throw new Error(t("export.failed"));
       const blob = await res.blob();
       const disposition = res.headers.get("Content-Disposition") || "";
       const utf8 = disposition.match(/filename\*=UTF-8''([^;]+)/i);
@@ -986,7 +1001,7 @@ $$("[data-export]").forEach((btn) =>
       link.download = name;
       link.click();
       URL.revokeObjectURL(url);
-      toast(`${name} downloaded.`);
+      toast(t("export.downloaded", { name }));
     } catch (err) {
       toast(err.message);
     } finally {
@@ -999,7 +1014,7 @@ $$("[data-export]").forEach((btn) =>
 async function loadHistory() {
   const rows = await fetch("/api/history?limit=30").then((r) => r.json()).catch(() => []);
   const box = $("#history-list");
-  if (!rows.length) { box.innerHTML = '<p class="empty">No searches yet.</p>'; return; }
+  if (!rows.length) { box.innerHTML = `<p class="empty">${esc(t("panel.noSearches"))}</p>`; return; }
   box.innerHTML = rows.map((r) => `
     <div class="row">
       <div class="row-main">
@@ -1027,7 +1042,7 @@ async function loadLibrary() {
   const rows = await fetch("/api/library").then((r) => r.json()).catch(() => []);
   const box = $("#library-list");
   if (!rows.length) {
-    box.innerHTML = '<p class="empty">Empty. Save articles from the results list.</p>';
+    box.innerHTML = `<p class="empty">${esc(t("panel.emptyLibrary"))}</p>`;
     return;
   }
   box.innerHTML = rows.map((r) => `
@@ -1059,24 +1074,29 @@ async function loadAccount() {
     me = await res.json();
   } catch {
     pill.className = "pill pill-warn";
-    pill.textContent = "offline";
+    pill.textContent = t("common.offline");
     return null;
   }
+
+  // Hesabın dili bu tarayıcıda saklanandan farklı olabilir (başka cihazda değiştirilmiş
+  // olabilir): hesaptaki kazanır ve sayfa hemen o dile çevrilir.
+  if (me.ui_language) window.I18N.setLanguage(me.ui_language);
 
   if (me.love) {
     pill.className = "pill pill-love";
     pill.innerHTML = '<span class="love-heart" aria-hidden="true">♥</span> ∞ credits · For my love';
-    pill.title = "Unlimited credits";
+    pill.title = t("top.unlimitedTitle");
   } else if (me.is_admin) {
     pill.className = "pill";
-    pill.textContent = "admin · unlimited";
+    pill.textContent = t("common.unlimited");
   } else {
     const low = me.credits_left <= 40;          // below a default search's typical cost
     pill.className = low ? "pill pill-warn" : "pill";
-    pill.textContent = `${me.credits_left} credits`;
+    pill.textContent = t("common.credits", { n: me.credits_left });
     pill.title = me.free_limited
-      ? "No free monthly credits on this account (too many free accounts from this network or browser)."
-      : `${me.plan_label} plan · ${me.credits_left} of ${me.credits_total} credits left`;
+      ? t("top.freeLimited")
+      : t("top.creditsTitle", { plan: me.plan_label, left: me.credits_left,
+                                total: me.credits_total });
   }
 
   // Güç modları: plana kapalı olanlar seçilemez, açık olanlar kredi tahminini gösterir.
@@ -1085,7 +1105,7 @@ async function loadAccount() {
   $$("#power-modes .power").forEach((btn) => {
     const open = allowed.includes(btn.dataset.mode);
     btn.disabled = !open;
-    btn.title = open ? "" : "This power mode is available on paid plans.";
+    btn.title = open ? "" : t("mode.locked");
   });
   if (!allowed.includes(state.powerMode)) {
     state.powerMode = allowed.includes("medium") ? "medium" : allowed[0];
@@ -1099,9 +1119,26 @@ async function loadAccount() {
     ft.checked = false;
     ft.disabled = true;
     const label = ft.closest(".switch");
-    if (label) label.title = "Full-text reading is available on paid plans.";
+    if (label) label.title = t("mode.fulltextLocked");
   }
   return me;
+}
+
+/* Arayüz dili ile cevap dilinin ayrı şeyler olduğunu anlatan, bir kerelik uyarı.
+   Kullanıcı arayüzünü Türkçeye çevirince cevapların da Türkçe geleceğini varsayıyor;
+   oysa cevap dili aramanın kendi ayarı. Sunucu bunun gösterilip gösterilmeyeceğine
+   karar verir (bkz. accounts.language_notice_pending), burası yalnız gösterir. */
+function showLanguageNotice(me) {
+  if (!me.language_notice_pending) return;
+  const box = $("#lang-notice");
+  if (!box) return;
+  box.hidden = false;
+  $("#lang-notice-ok").addEventListener("click", async () => {
+    box.hidden = true;
+    // Kapatma sunucuya bildirilemezse uyarı bir sonraki girişte tekrar çıkar;
+    // bu, hiç gösterilmemesinden iyidir, o yüzden hata kullanıcıya yansıtılmaz.
+    try { await fetch("/api/me/language-notice-seen", { method: "POST" }); } catch {}
+  }, { once: true });
 }
 
 /* ------------------------------------------------------- verification gate */
@@ -1121,12 +1158,12 @@ $("#verify-resend").addEventListener("click", async () => {
     const data = await res.json().catch(() => ({}));
     msg.className = "flag " + (res.ok ? "ok" : "err");
     msg.textContent = res.ok
-      ? (data.already_verified ? "Your email is already verified." : "Verification email sent, check your inbox.")
-      : (typeof data.detail === "string" ? data.detail : "Could not send the email.");
+      ? (data.already_verified ? t("verify.already") : t("verify.sent"))
+      : (typeof data.detail === "string" ? data.detail : t("verify.failed"));
     msg.hidden = false;
   } catch {
     msg.className = "flag err";
-    msg.textContent = "Could not reach the server.";
+    msg.textContent = t("errors.network");
     msg.hidden = false;
   }
   btn.disabled = false;
@@ -1137,6 +1174,7 @@ $("#verify-resend").addEventListener("click", async () => {
   const me = await loadAccount();
   if (!me) return;
   if (applyVerificationGate(me)) return;
+  showLanguageNotice(me);
   loadHistory();
   loadLibrary();
 })();

@@ -639,3 +639,22 @@ html[data-theme="dark"] .btn-primary { color: #04201d; }
 .dir-decrease { color: var(--ok); }
 .dir-increase { color: var(--danger); }
 .dir-null     { color: var(--muted); }
+
+/* Arayüz dili ile cevap dilinin ayrı şeyler olduğunu anlatan, bir kerelik uyarı.
+   Gizlilik şeridinin üstünde ve işaret ettiği "Gelişmiş" bölümüne yakın durur. */
+.lang-notice{
+  display:flex; align-items:flex-start; gap:18px; text-align:left;
+  max-width:760px; margin:0 auto 18px; padding:16px 18px;
+  background:var(--accent-soft); border-radius:var(--radius);
+  border:1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.lang-notice-text{ flex:1; }
+/* Yalnız doğrudan çocuk: gövdedeki <b>Gelişmiş</b> de blok olursa kendi satırına
+   düşüyor ve cümleyi ortadan ikiye bölüyor. */
+.lang-notice-text > b{ display:block; margin-bottom:5px; font-size:14.5px; }
+.lang-notice-text p{ margin:0; font-size:13.5px; line-height:1.6; color:var(--ink-2); }
+.lang-notice .btn{ flex:none; white-space:nowrap; }
+@media (max-width:640px){
+  .lang-notice{ flex-direction:column; gap:12px; }
+  .lang-notice .btn{ align-self:flex-start; }
+}

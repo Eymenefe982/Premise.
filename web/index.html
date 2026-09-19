@@ -20,6 +20,7 @@
 <link rel="icon" href="/static/img/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+<script src="/static/i18n.js"></script>
 </head>
 <body>
 
@@ -29,9 +30,9 @@
     <span class="brand-sub">PubMed · PubMed Central · Europe PMC</span>
   </div>
   <div class="topbar-right">
-    <span id="status-pill" class="pill pill-muted">connecting…</span>
-    <a href="/hesap" class="link-btn" title="My account and credits">My account</a>
-    <button id="theme-toggle" class="icon-btn" title="Light / dark theme" aria-label="Toggle theme">
+    <span id="status-pill" class="pill pill-muted" data-i18n="common.connecting">connecting…</span>
+    <a href="/hesap" class="link-btn" data-i18n="top.account" data-i18n-title="top.accountTitle">My account</a>
+    <button id="theme-toggle" class="icon-btn" data-i18n-title="top.theme" data-i18n-aria-label="top.theme">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7">
         <path class="sun" d="M12 4V2m0 20v-2m8-8h2M2 12h2m13.7-5.7 1.4-1.4M4.9 19.1l1.4-1.4m0-11.4L4.9 4.9m14.2 14.2-1.4-1.4"/>
         <circle class="sun" cx="12" cy="12" r="4"/>
@@ -44,12 +45,12 @@
 <!-- ------------------------------------------------------ VERIFICATION GATE -->
 <section class="verify-gate" id="verify-gate" hidden>
   <div class="verify-card">
-    <h2>Verify your email to search</h2>
-    <p>We've sent a confirmation link to your inbox. Click it, then reload this page.
+    <h2 data-i18n="verify.title">Verify your email to search</h2>
+    <p data-i18n="verify.body">We've sent a confirmation link to your inbox. Click it, then reload this page.
        Didn't get it? Check your spam folder, or request a new one below.</p>
     <div class="verify-actions">
-      <button type="button" class="btn btn-primary" id="verify-resend">Resend verification email</button>
-      <a href="/hesap" class="link-btn">Go to my account</a>
+      <button type="button" class="btn btn-primary" id="verify-resend" data-i18n="verify.resend">Resend verification email</button>
+      <a href="/hesap" class="link-btn" data-i18n="verify.goAccount">Go to my account</a>
     </div>
     <div class="flag" id="verify-gate-msg" hidden></div>
   </div>
@@ -58,14 +59,26 @@
 <main id="main">
   <!-- ---------------------------------------------------------- SEARCH -->
   <section class="hero" id="hero">
-    <h1>Ask a clinical question, we gather the evidence.</h1>
-    <p class="hero-sub">
+    <h1 data-i18n="hero.title">Ask a clinical question, we gather the evidence.</h1>
+    <p class="hero-sub" data-i18n="hero.sub">
       Your question is turned into academic search terms, then PubMed, PubMed Central and
       Europe PMC are searched at once. Free full texts are downloaded, ranked by level of
       evidence, and summarised with a citation behind every claim.
     </p>
 
-    <div class="privacy-banner">
+    <!-- Arayüz dili ile cevap dilinin ayrı şeyler olduğunu anlatır. Doğrulamadan sonraki
+         ilk girişte bir kez çıkar; "Gelişmiş"in hemen üstünde durur, çünkü işaret ettiği
+         ayar orada. -->
+    <div class="lang-notice" id="lang-notice" hidden>
+      <div class="lang-notice-text">
+        <b data-i18n="lang.notice.title">Your interface language has changed</b>
+        <p data-i18n-html="lang.notice.body">The answers themselves are written in a language you
+          choose for each search. Open <b>Advanced</b> under the search box to set it.</p>
+      </div>
+      <button type="button" class="btn btn-ghost" id="lang-notice-ok" data-i18n="lang.notice.ok">Got it</button>
+    </div>
+
+    <div class="privacy-banner" data-i18n-html="hero.privacy">
       <b>Not clinical decision support.</b> Verify every summary against the cited articles
       before acting on it. Do not type patient-identifying details (name, MRN, exact birth
       date) into the search box; describe the case in de-identified form. Your questions stay
@@ -79,9 +92,10 @@
           <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
         </svg>
         <input id="query" name="query" type="text" required
+               data-i18n-placeholder="search.placeholder"
                placeholder="e.g. Are DOACs safer than warfarin in elderly patients with atrial fibrillation?">
         <button type="submit" class="btn btn-primary" id="search-btn">
-          <span class="btn-label">Search</span>
+          <span class="btn-label" data-i18n="search.button">Search</span>
         </button>
       </div>
 
@@ -102,35 +116,36 @@
       </div>
 
       <div class="chips" id="quick-filters">
-        <button type="button" class="chip" data-filter="meta">Meta-analysis / systematic review</button>
-        <button type="button" class="chip" data-filter="rct">Randomised controlled</button>
-        <button type="button" class="chip" data-filter="guideline">Guidelines</button>
-        <button type="button" class="chip" data-filter="free_fulltext">Free full text</button>
-        <button type="button" class="chip" data-filter="humans">Human studies</button>
-        <button type="button" class="chip chip-ghost" id="toggle-advanced">Advanced ⌄</button>
+        <button type="button" class="chip" data-filter="meta" data-i18n="filter.meta">Meta-analysis / systematic review</button>
+        <button type="button" class="chip" data-filter="rct" data-i18n="filter.rct">Randomised controlled</button>
+        <button type="button" class="chip" data-filter="guideline" data-i18n="filter.guideline">Guidelines</button>
+        <button type="button" class="chip" data-filter="free_fulltext" data-i18n="filter.freeFulltext">Free full text</button>
+        <button type="button" class="chip" data-filter="humans" data-i18n="filter.humans">Human studies</button>
+        <button type="button" class="chip chip-ghost" id="toggle-advanced" data-i18n="filter.advancedOpen">Advanced ⌄</button>
       </div>
 
       <div class="advanced" id="advanced" hidden>
         <label class="field">
-          <span>Author</span>
-          <input id="author" type="text" placeholder="e.g. Smith J">
+          <span data-i18n="adv.author">Author</span>
+          <input id="author" type="text" data-i18n-placeholder="adv.authorHint" placeholder="e.g. Smith J">
         </label>
         <label class="field">
-          <span>Journal</span>
-          <input id="journal" type="text" placeholder="e.g. Lancet">
+          <span data-i18n="adv.journal">Journal</span>
+          <input id="journal" type="text" data-i18n-placeholder="adv.journalHint" placeholder="e.g. Lancet">
         </label>
         <label class="field">
-          <span>Published within</span>
+          <span data-i18n="adv.published">Published within</span>
           <select id="recent_years">
-            <option value="3">Last 3 years</option>
-            <option value="5">Last 5 years</option>
-            <option value="10" selected>Last 10 years</option>
-            <option value="20">Last 20 years</option>
-            <option value="0">No limit</option>
+            <option value="3" data-i18n="adv.years3">Last 3 years</option>
+            <option value="5" data-i18n="adv.years5">Last 5 years</option>
+            <option value="10" selected data-i18n="adv.years10">Last 10 years</option>
+            <option value="20" data-i18n="adv.years20">Last 20 years</option>
+            <option value="0" data-i18n="adv.yearsAny">No limit</option>
           </select>
         </label>
         <label class="field">
-          <span>Answer language</span>
+          <!-- Cevap dili: arayüz dilinden ayrıdır ve her aramada seçilir. -->
+          <span data-i18n="adv.answerLanguage">Answer language</span>
           <select id="language">
             <option>English</option>
             <option>Türkçe</option>
@@ -140,23 +155,23 @@
           </select>
         </label>
         <label class="field">
-          <span>Articles to read <b id="count-label">15</b></span>
+          <span><span data-i18n="adv.articles">Articles to read</span> <b id="count-label">15</b></span>
           <input id="max_articles" type="range" min="5" max="40" value="15" step="1">
         </label>
         <div class="field switches">
-          <label class="switch"><input type="checkbox" id="use_fulltext" checked><span>Read PMC full text</span></label>
-          <label class="switch"><input type="checkbox" id="only_open_access"><span>Open access only</span></label>
-          <label class="switch"><input type="checkbox" id="use_clinical" checked><span>Include clinical resources</span></label>
-          <label class="switch"><input type="checkbox" id="extract_stats" checked><span>Extract numeric findings</span></label>
+          <label class="switch"><input type="checkbox" id="use_fulltext" checked><span data-i18n="adv.readFulltext">Read PMC full text</span></label>
+          <label class="switch"><input type="checkbox" id="only_open_access"><span data-i18n="adv.openAccess">Open access only</span></label>
+          <label class="switch"><input type="checkbox" id="use_clinical" checked><span data-i18n="adv.clinical">Include clinical resources</span></label>
+          <label class="switch"><input type="checkbox" id="extract_stats" checked><span data-i18n="adv.extractStats">Extract numeric findings</span></label>
         </div>
       </div>
     </form>
 
     <div class="examples" id="examples">
-      <span>Try:</span>
-      <button type="button">What is the levothyroxine target in hypothyroidism during pregnancy?</button>
-      <button type="button">Do SGLT2 inhibitors improve kidney outcomes in type 2 diabetes?</button>
-      <button type="button">When is imaging indicated in paediatric febrile seizures?</button>
+      <span data-i18n="examples.try">Try:</span>
+      <button type="button" data-i18n="examples.1">What is the levothyroxine target in hypothyroidism during pregnancy?</button>
+      <button type="button" data-i18n="examples.2">Do SGLT2 inhibitors improve kidney outcomes in type 2 diabetes?</button>
+      <button type="button" data-i18n="examples.3">When is imaging indicated in paediatric febrile seizures?</button>
     </div>
   </section>
 
@@ -164,9 +179,9 @@
   <section class="progress-card" id="progress" hidden>
     <div class="progress-head">
       <span class="spinner"></span>
-      <span id="progress-msg">Starting…</span>
+      <span id="progress-msg" data-i18n="progress.starting">Starting…</span>
       <span class="progress-pct" id="progress-pct">0%</span>
-      <button type="button" class="btn btn-cancel" id="cancel-btn">Cancel</button>
+      <button type="button" class="btn btn-cancel" id="cancel-btn" data-i18n="common.cancel">Cancel</button>
     </div>
     <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
     <p class="progress-cost" id="progress-cost"></p>
@@ -195,10 +210,10 @@
     <div class="evidence-notice" id="evidence-notice" hidden></div>
 
     <nav class="tabs" id="tabs">
-      <button class="tab active" data-tab="synthesis">Synthesis</button>
-      <button class="tab" data-tab="articles">Articles <b id="tab-count-articles">0</b></button>
-      <button class="tab" data-tab="clinical">Clinical resources <b id="tab-count-clinical">0</b></button>
-      <button class="tab" data-tab="strategy">Search strategy</button>
+      <button class="tab active" data-tab="synthesis" data-i18n="tab.synthesis">Synthesis</button>
+      <button class="tab" data-tab="articles"><span data-i18n="tab.articles">Articles</span> <b id="tab-count-articles">0</b></button>
+      <button class="tab" data-tab="clinical"><span data-i18n="tab.clinical">Clinical resources</span> <b id="tab-count-clinical">0</b></button>
+      <button class="tab" data-tab="strategy" data-i18n="tab.strategy">Search strategy</button>
     </nav>
 
     <div class="tab-panel active" id="panel-synthesis">
@@ -212,11 +227,11 @@
     <div class="tab-panel" id="panel-articles">
       <div class="list-toolbar">
         <div class="chips">
-          <button type="button" class="chip active" data-sort="score">Relevance</button>
-          <button type="button" class="chip" data-sort="year">Year</button>
-          <button type="button" class="chip" data-sort="citations">Citations</button>
+          <button type="button" class="chip active" data-sort="score" data-i18n="sort.relevance">Relevance</button>
+          <button type="button" class="chip" data-sort="year" data-i18n="sort.year">Year</button>
+          <button type="button" class="chip" data-sort="citations" data-i18n="sort.citations">Citations</button>
         </div>
-        <label class="switch"><input type="checkbox" id="filter-oa"><span>Free to read only</span></label>
+        <label class="switch"><input type="checkbox" id="filter-oa"><span data-i18n="sort.freeOnly">Free to read only</span></label>
       </div>
       <div id="article-list" class="cards"></div>
     </div>
@@ -234,15 +249,15 @@
   <section class="side-sections">
     <div class="panel">
       <div class="panel-head">
-        <h3>Recent searches</h3>
-        <button class="link-btn" id="refresh-history">Refresh</button>
+        <h3 data-i18n="panel.recent">Recent searches</h3>
+        <button class="link-btn" id="refresh-history" data-i18n="common.refresh">Refresh</button>
       </div>
       <div id="history-list" class="rows"></div>
     </div>
     <div class="panel">
       <div class="panel-head">
-        <h3>My library</h3>
-        <button class="link-btn" id="refresh-library">Refresh</button>
+        <h3 data-i18n="panel.library">My library</h3>
+        <button class="link-btn" id="refresh-library" data-i18n="common.refresh">Refresh</button>
       </div>
       <div id="library-list" class="rows"></div>
     </div>
@@ -250,24 +265,24 @@
 </main>
 
 <footer class="footer">
-  <p>
+  <p data-i18n="footer.sources">
     Sources: PubMed, PubMed Central, Europe PMC, OpenAlex, Unpaywall, StatPearls, Cochrane, TR Dizin.
     UpToDate requires a subscription; its content is never copied here. You only get a search link
     to open with your own institutional access.
   </p>
-  <p class="footer-warn">This tool is not clinical decision support. Verify every summary against the cited articles before acting on it.</p>
-  <p class="footer-warn"><a href="/gizlilik">Privacy policy →</a> &nbsp;·&nbsp; <a href="/kosullar">Terms of use →</a></p>
+  <p class="footer-warn" data-i18n="footer.warning">This tool is not clinical decision support. Verify every summary against the cited articles before acting on it.</p>
+  <p class="footer-warn"><a href="/gizlilik" data-i18n="auth.privacy">Privacy policy →</a> &nbsp;·&nbsp; <a href="/kosullar" data-i18n="auth.terms">Terms of use →</a></p>
 </footer>
 
 <!-- ---------------------------------------------------- SOURCE DRAWER -->
 <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
-<aside class="drawer" id="drawer" hidden aria-label="Source passages">
+<aside class="drawer" id="drawer" hidden data-i18n-aria-label="drawer.title">
   <header class="drawer-head">
     <div>
-      <h3>Source passages</h3>
-      <p class="drawer-sub">Where this claim comes from in the article text</p>
+      <h3 data-i18n="drawer.title">Source passages</h3>
+      <p class="drawer-sub" data-i18n="drawer.sub">Where this claim comes from in the article text</p>
     </div>
-    <button class="icon-btn" id="drawer-close" title="Close" aria-label="Close">
+    <button class="icon-btn" id="drawer-close" data-i18n-title="common.close" data-i18n-aria-label="common.close">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M18 6 6 18M6 6l12 12"/>
       </svg>

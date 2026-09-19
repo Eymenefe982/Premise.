@@ -45,10 +45,14 @@ class Stage:
 
 @dataclass(frozen=True)
 class Profile:
+    """Bir modun bütün ayarları.
+
+    Burada yalnız SAYILAR ve modeller var, kullanıcıya gösterilecek metin yok: arayüz
+    iki dilde (bkz. web/i18n.js) ve sunucunun tek dilde düzyazı göndermesi o metni
+    çevrilemez kılıyordu. Arayüz açıklamayı aşağıdaki sayılardan kendi dilinde kurar,
+    böylece bir knob değiştiğinde açıklama da onunla birlikte değişir.
+    """
     name: str
-    label: str
-    summary: str
-    use_case: str
     ceiling_try: float          # bu tutara yaklaşınca hat kendini kısar
     estimate_try: float         # tipik arama maliyeti (arayüzdeki "≈" değeri)
     stages: dict[str, Stage]
@@ -68,34 +72,10 @@ class Profile:
     def stage(self, name: str) -> Stage:
         return self.stages[name]
 
-    @property
-    def features(self) -> list[str]:
-        """Arayüzde gösterilen özellik listesi.
-
-        Metin profilin kendisinden türetilir: bir knob değişince açıklama da
-        değişir, ikisi asla ayrışmaz.
-        """
-        items = [f"Screens {self.triage_candidates} candidates, answers from "
-                 f"{self.max_articles}"]
-        items.append("Abstracts only — full text is not read" if not self.fulltext_top_n
-                     else f"Reads the full text of up to {self.fulltext_top_n} articles")
-        if self.extract:
-            items.append("Extracts effect sizes, confidence intervals and sample "
-                         "sizes, each checked against the source text")
-        if self.tables:
-            items.append("Adds an evidence table and a numeric findings table")
-        items.append("Drops off-topic articles, flags invented citations and checks "
-                     "every claim against the article it cites")
-        return items
-
 
 PROFILES: dict[str, Profile] = {
     "medium": Profile(
         name="medium",
-        label="Medium power",
-        summary="Balanced depth: full-text reading and verified numbers.",
-        use_case="The everyday setting for a clinical question — enough depth to "
-                 "quote a number, without paying for a full review.",
         # Canlıda ölçüldü (2026-09-19, bekçi yükseltmesinden SONRA): hafif bir soru
         # ("ideal uyku süresi") 0,4736 TL / 14 kredi, gerçek bir klinik soru ("Tip 1
         # diyabette beyin") 0,6662 TL / 20 kredi. Yükseltmeden önce ağır sorular 0,595 ve
@@ -119,10 +99,6 @@ PROFILES: dict[str, Profile] = {
     ),
     "high": Profile(
         name="high",
-        label="High power",
-        summary="A deep report: the widest net, long full texts and data tables.",
-        use_case="For work you will have to defend — a case presentation, a journal "
-                 "club, a review draft, or a decision someone will question.",
         # Canlıda ölçüldü (2026-09-19, bekçi yükseltmesinden SONRA): 2,8320 TL (85 kredi,
         # 37.231/11.679 token). Yükseltmeden önce 2,349 TL ölçülmüştü; aradaki fark
         # fiyat tablosundan beklediğimden (~0,13) büyük çıktı, ama sorular aynı olmadığı

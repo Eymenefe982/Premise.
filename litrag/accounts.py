@@ -824,12 +824,16 @@ def public(user: dict) -> dict:
         "love": is_love(user),
         "fulltext_allowed": True if is_unlimited(user) else plan["fulltext"],
         "modes": list(allowed_modes(user)),
-        "mode_costs": {name: {"label": p.label, "summary": p.summary,
-                              "use_case": p.use_case, "features": p.features,
-                              "estimate": meter.credits_for(p.estimate_try),
+        # Yalnız sayılar gider; modun adını ve açıklamasını arayüz kendi dilinde
+        # bunlardan kurar (bkz. web/i18n.js). Sunucudan hazır düzyazı göndermek,
+        # arayüz iki dilli olduğu anda o metni çevrilemez kılıyordu.
+        "mode_costs": {name: {"estimate": meter.credits_for(p.estimate_try),
                               "max": meter.credits_for(p.ceiling_try),
                               "articles": p.max_articles,
-                              "fulltext": p.fulltext_top_n}
+                              "triage": p.triage_candidates,
+                              "fulltext": p.fulltext_top_n,
+                              "extract": p.extract,
+                              "tables": p.tables}
                        for name, p in modes.PROFILES.items()},
         "email_verified": bool(user.get("email_verified_at")),
         "must_change_password": bool(user.get("must_change_password")),
