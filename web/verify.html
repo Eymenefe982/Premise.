@@ -8,6 +8,8 @@
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/auth.css">
+<script src="/static/i18n.js"></script>
+
 <link rel="icon" href="/static/img/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
@@ -17,15 +19,14 @@
 <div class="auth-wrap">
   <div class="auth-card">
     <h1 class="auth-brand">Premise<span>.</span></h1>
-    <p class="auth-tag">Email verification</p>
+    <p class="auth-tag" data-i18n="ev.tag">Email verification</p>
 
-    <div class="msg info" id="state">Verifying…</div>
-    <p class="alt-link"><a href="/">Back to Premise</a></p>
+    <div class="msg info" id="state" data-i18n="ev.verifying">Verifying…</div>
+    <p class="alt-link"><a href="/" data-i18n="ev.back">Back to Premise</a></p>
     <p class="foot">
-      Premise is a literature search and summarisation tool. <b>It is not clinical decision
-      support</b>, does not diagnose, and does not recommend treatment.
+      <span data-i18n-html="auth.foot">Premise is a literature search and summarisation tool.</span>
       <br><br>
-      <a href="/giris">Back to sign in →</a>
+      <a href="/giris" data-i18n="ev.backSignin">Back to sign in →</a>
     </p>
   </div>
 </div>
@@ -35,9 +36,10 @@
   const token = new URLSearchParams(location.search).get('token') || '';
   const box = document.getElementById('state');
 
-  function set(cls, text){ box.className = 'msg ' + cls; box.textContent = text; }
+  const t = (k) => window.I18N.t(k);
+  function set(cls, text){ box.className = 'msg ' + cls; window.I18N.fill(box, text); }
 
-  if (!token) { set('err', 'No verification code in this link.'); return; }
+  if (!token) { set('err', t('ev.noToken')); return; }
 
   fetch('/api/auth/verify', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -45,13 +47,12 @@
   }).then(async (res) => {
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      set('ok', 'Your email address has been verified. You can start using Premise.');
+      set('ok', t('ev.ok'));
       setTimeout(() => (location.href = '/'), 2500);
     } else {
-      set('err', data.detail || 'This verification link is invalid or has expired. ' +
-                 'You can request a new one from your account page.');
+      set('err', data.detail || t('ev.bad'));
     }
-  }).catch(() => set('err', 'Could not reach the server.'));
+  }).catch(() => set('err', t('errors.network')));
 })();
 </script>
 </body>

@@ -400,6 +400,113 @@
     "strategy.academic":   { en: "Academic phrasing", tr: "Akademik ifade" },
     "strategy.mesh":       { en: "MeSH terms",        tr: "MeSH terimleri" },
     "strategy.screening":  { en: "Screening summary", tr: "Tarama özeti" },
+    /* --------------------------------------------------- küçük sayfalar */
+    "nf.title":            { en: "This page doesn\u2019t exist", tr: "Bu sayfa yok" },
+    "nf.body": {
+      en: "The link may be broken, or the page may have moved. Your searches and library are safe.",
+      tr: "Bağlantı bozuk olabilir ya da sayfa taşınmış olabilir. Aramalarınız ve kütüphaneniz güvende."
+    },
+    "nf.goSearch":         { en: "Go to search", tr: "Aramaya git" },
+    "nf.howItWorks":       { en: "How Premise works", tr: "Premise nasıl çalışır" },
+
+    "ev.tag":              { en: "Email verification", tr: "E-posta doğrulama" },
+    "ev.verifying":        { en: "Verifying…", tr: "Doğrulanıyor…" },
+    "ev.noToken":          { en: "No verification code in this link.",
+                             tr: "Bu bağlantıda doğrulama kodu yok." },
+    "ev.ok": {
+      en: "Your email address has been verified. You can start using Premise.",
+      tr: "E-posta adresiniz doğrulandı. Premise'i kullanmaya başlayabilirsiniz."
+    },
+    "ev.bad": {
+      en: "This verification link is invalid or has expired. You can request a new one from your account page.",
+      tr: "Bu doğrulama bağlantısı geçersiz ya da süresi dolmuş. Hesap sayfanızdan yenisini isteyebilirsiniz."
+    },
+    "ev.back":             { en: "Back to Premise", tr: "Premise'e dön" },
+    "ev.backSignin":       { en: "Back to sign in →", tr: "Girişe dön →" },
+
+    "rp.tag":              { en: "Reset password", tr: "Şifre sıfırlama" },
+    "rp.lead": {
+      en: "Enter your account's email address. If it's registered, we'll send a temporary password you can sign in with right away.",
+      tr: "Hesabınızın e-posta adresini girin. Kayıtlıysa, hemen giriş yapabileceğiniz geçici bir şifre göndereceğiz."
+    },
+    "rp.submit":           { en: "Send temporary password", tr: "Geçici şifre gönder" },
+    "rp.backSignin":       { en: "Back to sign in", tr: "Girişe dön" },
+    "rp.failed":           { en: "Could not send the request.", tr: "İstek gönderilemedi." },
+    "rp.sent": {
+      en: "If this address is registered, we sent a temporary password to your inbox. Sign in with it, then set a permanent password from your account.",
+      tr: "Bu adres kayıtlıysa gelen kutunuza geçici bir şifre gönderdik. Onunla giriş yapıp hesabınızdan kalıcı bir şifre belirleyin."
+    },
+
+    /* ------------------------------------------------------------ hesap sayfası */
+    "account.back":        { en: "← Back to search", tr: "← Aramaya dön" },
+    "account.signout":     { en: "Sign out", tr: "Çıkış yap" },
+    "account.loading":     { en: "Loading…", tr: "Yükleniyor…" },
+    "account.forcePw":     { en: "Change your password", tr: "Şifrenizi değiştirin" },
+    "account.forcePwSub": {
+      en: "You signed in with a temporary password. Set a permanent one below before continuing.",
+      tr: "Geçici bir şifreyle giriş yaptınız. Devam etmeden önce aşağıdan kalıcı bir şifre belirleyin."
+    },
+    "account.verifyTitle": { en: "Verify your email address",
+                             tr: "E-posta adresinizi doğrulayın" },
+    "account.verifySub": {
+      en: "To search, you need to click the link we sent to your email address. Didn't get it? Check your spam/junk folder.",
+      tr: "Arama yapabilmek için e-posta adresinize gönderdiğimiz bağlantıya tıklamanız gerekiyor. Ulaşmadıysa spam/önemsiz klasörünüze bakın."
+    },
+    "account.credits":     { en: "Credits", tr: "Krediler" },
+    "account.perSearch":   { en: "How many credits per search?",
+                             tr: "Arama başına kaç kredi?" },
+    "account.perSearchAny": { en: "depends on the power mode you pick",
+                              tr: "seçtiğiniz güç moduna bağlı" },
+    "account.cached":      { en: "Cached result", tr: "Önbellekten gelen sonuç" },
+    "account.cancelled":   { en: "Cancelled search", tr: "İptal edilen arama" },
+    "account.free":        { en: "free", tr: "ücretsiz" },
+    "account.periodStart": { en: "Period start", tr: "Dönem başı" },
+    "account.freeLimited": {
+      en: "This account has no free monthly credits: several free accounts were recently opened from the same network or browser. Accounts with an institutional email (for example .edu.tr or .gov.tr) are not affected.",
+      tr: "Bu hesapta aylık ücretsiz kredi yok: yakın zamanda aynı ağdan ya da tarayıcıdan birden çok ücretsiz hesap açılmış. Kurumsal e-postayla (ör. .edu.tr ya da .gov.tr) açılan hesaplar bundan etkilenmez."
+    },
+    "account.ledger":      { en: "Credit history", tr: "Kredi geçmişi" },
+    "account.ledgerSub":   { en: "Last 50 transactions.", tr: "Son 50 hareket." },
+    "account.noActivity":  { en: "No activity yet.", tr: "Henüz hareket yok." },
+    "account.changePw":    { en: "Change password", tr: "Şifre değiştir" },
+    "account.pwCurrent":   { en: "Current password", tr: "Mevcut şifre" },
+    "account.pwNew":       { en: "New password", tr: "Yeni şifre" },
+    "account.update":      { en: "Update", tr: "Güncelle" },
+    "account.pwUpdated":   { en: "Your password has been updated.",
+                             tr: "Şifreniz güncellendi." },
+    "account.pwFailed":    { en: "Could not update the password.",
+                             tr: "Şifre güncellenemedi." },
+    "account.delete":      { en: "Delete account", tr: "Hesabı sil" },
+    "account.deleteSub": {
+      en: "Permanently deletes your account and everything stored under it: search history, reports, library, credit history, and cached answers created from your questions. This cannot be undone. If you sign up again with the same address this month, the free credits you already used this month stay used.",
+      tr: "Hesabınızı ve altında saklanan her şeyi kalıcı olarak siler: arama geçmişi, raporlar, kütüphane, kredi geçmişi ve sorularınızdan üretilmiş önbellek kayıtları. Bu işlem geri alınamaz. Bu ay aynı adresle yeniden kaydolursanız, bu ay kullandığınız ücretsiz krediler kullanılmış sayılmaya devam eder."
+    },
+    "account.yourPassword": { en: "Your password", tr: "Şifreniz" },
+    "account.deleteBtn":   { en: "Delete my account", tr: "Hesabımı sil" },
+    "account.deleteNeedPw": { en: "Enter your password to confirm.",
+                              tr: "Onaylamak için şifrenizi girin." },
+    "account.deleteConfirm": {
+      en: "Delete your Premise account and all of its data? This cannot be undone.",
+      tr: "Premise hesabınız ve tüm verileriniz silinsin mi? Bu işlem geri alınamaz."
+    },
+    "account.deleted":     { en: "Your account has been deleted.", tr: "Hesabınız silindi." },
+    "account.deleteFailed": { en: "Could not delete the account.", tr: "Hesap silinemedi." },
+    "account.contact":     { en: "Contact", tr: "İletişim" },
+    "account.contactSub":  { en: "Questions, a data request, or something not working:",
+                             tr: "Sorularınız, veri talebiniz ya da çalışmayan bir şey için:" },
+    "account.adminPlan":   { en: "Administrator account: all features unlimited.",
+                             tr: "Yönetici hesabı: tüm özellikler sınırsız." },
+    "account.lovePlan":    { en: "Unlimited credits · full-text reading on",
+                             tr: "Sınırsız kredi · tam metin okuma açık" },
+    "account.planLine":    { en: "{plan} plan · full-text reading {state}",
+                             tr: "{plan} plan · tam metin okuma {state}" },
+    "account.on":          { en: "on",  tr: "açık" },
+    "account.off":         { en: "off", tr: "kapalı" },
+    "account.unlimited":   { en: "unlimited", tr: "sınırsız" },
+    "account.creditsLeft": { en: "/ {total} credits left", tr: "/ {total} kredi kaldı" },
+    "account.langSaved":   { en: "Interface language updated.",
+                             tr: "Arayüz dili güncellendi." },
+
     "strategy.screeningText": {
       en: "{pool} unique records screened, {articles} articles selected, {fulltext} full texts read.",
       tr: "{pool} tekil kayıt tarandı, {articles} makale seçildi, {fulltext} tam metin okundu."
@@ -468,8 +575,20 @@
     return changed;
   }
 
+  /* Dinamik olarak doldurulan bir öğe data-i18n taşımaya devam ederse, dil
+     değiştiğinde apply() onu yer tutucu metnine geri döndürür: hesap sayfasında
+     yüklenmiş plan satırının "Yükleniyor…"a geri dönmesi tam olarak buydu. Yer
+     tutucu ilk boyamada işe yarar, ama gerçek içerik gelince düşmelidir. */
+  function fill(el, text) {
+    if (!el) return;
+    el.removeAttribute("data-i18n");
+    el.removeAttribute("data-i18n-html");
+    el.textContent = text;
+  }
+
   window.I18N = {
     t: t,
+    fill: fill,
     apply: apply,
     setLanguage: setLanguage,
     supported: SUPPORTED.slice(),

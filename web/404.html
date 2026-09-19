@@ -16,6 +16,7 @@
   .nf p{ color:var(--ink-2); font-size:15px; line-height:1.6; margin:0 0 28px; }
   .nf .actions{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
 </style>
+<script src="/static/i18n.js"></script>
 </head>
 <body>
 
@@ -27,11 +28,11 @@
 
 <main class="nf">
   <p class="code">404</p>
-  <h1>This page doesn't exist</h1>
-  <p>The link may be broken, or the page may have moved. Your searches and library are safe.</p>
+  <h1 data-i18n="nf.title">This page doesn't exist</h1>
+  <p data-i18n="nf.body">The link may be broken, or the page may have moved.</p>
   <div class="actions">
-    <a class="btn btn-primary" href="/">Go to search</a>
-    <a class="btn" href="/tanitim">How Premise works</a>
+    <a class="btn btn-primary" href="/" data-i18n="nf.goSearch">Go to search</a>
+    <a class="btn" href="/tanitim" data-i18n="nf.howItWorks">How Premise works</a>
   </div>
 </main>
 

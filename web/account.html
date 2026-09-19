@@ -10,6 +10,7 @@
 <link rel="icon" href="/static/img/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+<script src="/static/i18n.js"></script>
 <style>
   .page{ max-width:760px; margin:0 auto; padding:28px 20px 80px; }
   .bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
@@ -78,34 +79,32 @@
   <div class="bar">
     <div class="logo">Premise<span>.</span></div>
     <div>
-      <a href="/">← Back to search</a>
+      <a href="/" data-i18n="account.back">← Back to search</a>
       &nbsp;·&nbsp;
-      <a href="#" id="logout">Sign out</a>
+      <a href="#" id="logout" data-i18n="account.signout">Sign out</a>
     </div>
   </div>
 
   <!-- user signed in with a temporary password -->
   <div class="card" id="force-pw" hidden>
-    <h2>Change your password</h2>
-    <p class="sub">You signed in with a temporary password. Set a permanent one below
-      before continuing.</p>
+    <h2 data-i18n="account.forcePw">Change your password</h2>
+    <p class="sub" data-i18n="account.forcePwSub">You signed in with a temporary password.</p>
   </div>
 
   <!-- email not verified -->
   <div class="card" id="verify-email" hidden>
-    <h2>Verify your email address</h2>
-    <p class="sub">To search, you need to click the link we sent to your email address.
-      Didn't get it? Check your spam/junk folder.</p>
+    <h2 data-i18n="account.verifyTitle">Verify your email address</h2>
+    <p class="sub" data-i18n="account.verifySub">To search, click the link we sent you.</p>
     <div class="inline">
-      <button class="btn" id="resend-verify">Resend verification email</button>
+      <button class="btn" id="resend-verify" data-i18n="verify.resend">Resend verification email</button>
     </div>
     <div class="flag" id="verify-msg" hidden></div>
   </div>
 
   <!-- credits -->
   <div class="card">
-    <h2>Credits</h2>
-    <p class="sub" id="plan-line">Loading…</p>
+    <h2 data-i18n="account.credits">Credits</h2>
+    <p class="sub" id="plan-line" data-i18n="account.loading">Loading…</p>
     <div class="credits">
       <b id="credits-left">—</b>
       <small id="credits-total"></small>
@@ -113,59 +112,69 @@
     </div>
     <div class="meter"><i id="credits-bar" style="width:0"></i></div>
     <div class="rows" style="margin-top:14px">
-      <div class="row"><span class="k">How many credits per search?</span>
-        <span class="v" id="mode-costs">depends on the power mode you pick</span></div>
-      <div class="row"><span class="k">Cached result</span><span class="v">free</span></div>
-      <div class="row"><span class="k">Cancelled search</span><span class="v">free</span></div>
-      <div class="row"><span class="k">Period start</span><span class="v" id="period">—</span></div>
+      <div class="row"><span class="k" data-i18n="account.perSearch">How many credits per search?</span>
+        <span class="v" id="mode-costs" data-i18n="account.perSearchAny">depends on the power mode you pick</span></div>
+      <div class="row"><span class="k" data-i18n="account.cached">Cached result</span><span class="v" data-i18n="account.free">free</span></div>
+      <div class="row"><span class="k" data-i18n="account.cancelled">Cancelled search</span><span class="v" data-i18n="account.free">free</span></div>
+      <div class="row"><span class="k" data-i18n="account.periodStart">Period start</span><span class="v" id="period">—</span></div>
     </div>
-    <p class="sub" id="free-limited" hidden style="margin-top:14px">
-      This account has no free monthly credits: several free accounts were recently opened from
-      the same network or browser. Accounts with an institutional email (for example .edu.tr or
-      .gov.tr) are not affected.
+    <p class="sub" id="free-limited" hidden style="margin-top:14px" data-i18n="account.freeLimited">
+      This account has no free monthly credits.
     </p>
   </div>
 
   <!-- credit ledger -->
   <div class="card">
-    <h2>Credit history</h2>
-    <p class="sub">Last 50 transactions.</p>
-    <div class="rows ledger" id="ledger"><div class="row"><span class="k">Loading…</span></div></div>
+    <h2 data-i18n="account.ledger">Credit history</h2>
+    <p class="sub" data-i18n="account.ledgerSub">Last 50 transactions.</p>
+    <div class="rows ledger" id="ledger"><div class="row"><span class="k" data-i18n="account.loading">Loading…</span></div></div>
   </div>
 
   <!-- password -->
   <div class="card">
-    <h2>Change password</h2>
-    <p class="sub">Must be at least 8 characters.</p>
+    <h2 data-i18n="account.changePw">Change password</h2>
+    <p class="sub" data-i18n="auth.pwHint">Must be at least 8 characters.</p>
     <div class="inline">
-      <input type="password" id="pw-old" placeholder="Current password" autocomplete="current-password">
-      <input type="password" id="pw-new" placeholder="New password" autocomplete="new-password" minlength="8">
-      <button class="btn" id="save-pw">Update</button>
+      <input type="password" id="pw-old" data-i18n-placeholder="account.pwCurrent" placeholder="Current password" autocomplete="current-password">
+      <input type="password" id="pw-new" data-i18n-placeholder="account.pwNew" placeholder="New password" autocomplete="new-password" minlength="8">
+      <button class="btn" id="save-pw" data-i18n="account.update">Update</button>
     </div>
     <div class="flag" id="pw-msg" hidden></div>
   </div>
 
   <!-- delete account -->
   <div class="card">
-    <h2>Delete account</h2>
-    <p class="sub">
-      Permanently deletes your account and everything stored under it: search history,
-      reports, library, credit history, and cached answers created from your questions.
-      This cannot be undone. If you sign up again with the same address this month, the free
-      credits you already used this month stay used.
+    <h2 data-i18n="account.delete">Delete account</h2>
+    <p class="sub" data-i18n="account.deleteSub">
+      Permanently deletes your account and everything stored under it.
     </p>
     <div class="inline">
-      <input type="password" id="del-pw" placeholder="Your password" autocomplete="current-password">
-      <button class="btn danger" id="delete-account">Delete my account</button>
+      <input type="password" id="del-pw" data-i18n-placeholder="account.yourPassword" placeholder="Your password" autocomplete="current-password">
+      <button class="btn danger" id="delete-account" data-i18n="account.deleteBtn">Delete my account</button>
     </div>
     <div class="flag" id="del-msg" hidden></div>
   </div>
 
+  <!-- interface language -->
+  <div class="card">
+    <h2 data-i18n="lang.label">Interface language</h2>
+    <p class="sub" data-i18n="lang.hint">This changes the interface only.</p>
+    <div class="inline">
+      <select id="ui-language" style="flex:1; min-width:220px; border:1px solid var(--border-strong);
+              border-radius:var(--radius-sm); background:var(--bg); color:var(--ink);
+              font:inherit; padding:10px 12px;">
+        <option value="en">English</option>
+        <option value="tr">Türkçe</option>
+      </select>
+    </div>
+    <div class="flag" id="lang-msg" hidden></div>
+  </div>
+
   <!-- contact -->
   <div class="card">
-    <h2>Contact</h2>
+    <h2 data-i18n="account.contact">Contact</h2>
     <p class="sub">
-      Questions, a data request, or something not working:
+      <span data-i18n="account.contactSub">Questions, a data request, or something not working:</span>
       <a href="mailto:premise.litapp@gmail.com">premise.litapp@gmail.com</a>
     </p>
   </div>
@@ -174,6 +183,8 @@
 <script>
 (function(){
   const $ = id => document.getElementById(id);
+  const t = (key, vars) => window.I18N.t(key, vars);
+  const fill = (el, text) => window.I18N.fill(el, text);
   function esc(text){
     return String(text ?? '').replace(/[&<>"']/g, c =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -190,18 +201,24 @@
     if (!res.ok) return location.replace('/giris');
     const me = await res.json();
 
-    $('plan-line').textContent = me.is_admin
-      ? 'Administrator account: all features unlimited.'
-      : me.love ? 'Unlimited credits · full-text reading on'
-      : `${me.plan_label} plan · full-text reading ${me.fulltext_allowed ? 'on' : 'off'}`;
+    // Hesaptaki dil bu tarayicidakinden farkli olabilir; once onu uygula.
+    if (me.ui_language) window.I18N.setLanguage(me.ui_language);
+    $('ui-language').value = window.I18N.language;
+
+    fill($('plan-line'), me.is_admin
+      ? t('account.adminPlan')
+      : me.love ? t('account.lovePlan')
+      : t('account.planLine', { plan: me.plan_label,
+                                state: t(me.fulltext_allowed ? 'account.on' : 'account.off') }));
     $('period').textContent = (me.period_start || '').slice(0, 10);
 
     // Kredi artık formülden değil, aramanın gerçek token maliyetinden hesaplanıyor.
     const costs = me.mode_costs || {};
     const open = me.modes || Object.keys(costs);
+    // Mod adi sunucudan gelmez, sozlukten kurulur (bkz. web/i18n.js).
     const parts = open.filter((m) => costs[m])
-      .map((m) => `${costs[m].label}: ≈${costs[m].estimate}`);
-    if (parts.length) $('mode-costs').textContent = parts.join(' · ') + ' credits';
+      .map((m) => `${t('mode.' + m + '.label')}: ${t('mode.estimate', { n: costs[m].estimate })}`);
+    if (parts.length) fill($('mode-costs'), parts.join(' · '));
 
     if (me.must_change_password){
       $('force-pw').hidden = false;
@@ -216,11 +233,11 @@
     $('free-limited').hidden = !me.free_limited;
     if (me.unlimited || me.is_admin){
       $('credits-left').textContent = '∞';
-      $('credits-total').textContent = 'unlimited';
+      $('credits-total').textContent = t('account.unlimited');
       $('credits-bar').style.width = '100%';
     } else {
       $('credits-left').textContent = me.credits_left;
-      $('credits-total').textContent = `/ ${me.credits_total} credits left`;
+      $('credits-total').textContent = t('account.creditsLeft', { total: me.credits_total });
       const pct = me.credits_total ? (me.credits_left / me.credits_total) * 100 : 0;
       $('credits-bar').style.width = Math.max(0, Math.min(100, pct)) + '%';
     }
@@ -232,7 +249,7 @@
     const rows = await res.json();
     const box = $('ledger');
     if (!rows.length){
-      box.innerHTML = '<div class="row"><span class="k">No activity yet.</span></div>';
+      box.innerHTML = `<div class="row"><span class="k">${esc(t('account.noActivity'))}</span></div>`;
       return;
     }
     box.innerHTML = rows.map(r => `
@@ -248,10 +265,9 @@
     const res = await fetch('/api/auth/resend-verification', { method: 'POST' });
     const d = await res.json().catch(() => ({}));
     if (res.ok){
-      flag($('verify-msg'), d.already_verified ? 'Your email is already verified.'
-           : 'Verification email sent, check your inbox.', true);
+      flag($('verify-msg'), t(d.already_verified ? 'verify.already' : 'verify.sent'), true);
     } else {
-      flag($('verify-msg'), typeof d.detail === 'string' ? d.detail : 'Could not send the email.', false);
+      flag($('verify-msg'), typeof d.detail === 'string' ? d.detail : t('verify.failed'), false);
     }
     btn.disabled = false;
   });
@@ -267,21 +283,21 @@
     });
     const d = await res.json().catch(() => ({}));
     if (res.ok){
-      flag($('pw-msg'), 'Your password has been updated.', true);
+      flag($('pw-msg'), t('account.pwUpdated'), true);
       $('pw-old').value = $('pw-new').value = '';
     } else {
       flag($('pw-msg'), typeof d.detail === 'string' ? d.detail
-           : Array.isArray(d.detail) ? (d.detail[0]?.msg || 'Could not update the password.')
-           : 'Could not update the password.', false);
+           : Array.isArray(d.detail) ? (d.detail[0]?.msg || t('account.pwFailed'))
+           : t('account.pwFailed'), false);
     }
   });
 
   $('delete-account').addEventListener('click', async () => {
     const password = $('del-pw').value;
     if (!password){
-      return flag($('del-msg'), 'Enter your password to confirm.', false);
+      return flag($('del-msg'), t('account.deleteNeedPw'), false);
     }
-    if (!confirm('Delete your Premise account and all of its data? This cannot be undone.')) return;
+    if (!confirm(t('account.deleteConfirm'))) return;
     const btn = $('delete-account');
     btn.disabled = true;
     const res = await fetch('/api/me', {
@@ -291,18 +307,38 @@
     });
     const d = await res.json().catch(() => ({}));
     if (res.ok){
-      flag($('del-msg'), 'Your account has been deleted.', true);
+      flag($('del-msg'), t('account.deleted'), true);
       setTimeout(() => location.replace('/giris'), 1200);
       return;
     }
     btn.disabled = false;
-    flag($('del-msg'), typeof d.detail === 'string' ? d.detail : 'Could not delete the account.', false);
+    flag($('del-msg'), typeof d.detail === 'string' ? d.detail : t('account.deleteFailed'), false);
   });
 
   $('logout').addEventListener('click', async e => {
     e.preventDefault();
     await fetch('/api/auth/logout', { method: 'POST' });
     location.replace('/giris');
+  });
+
+  // Dil degisikligi hesaba yazilir: baska bir cihazdan girildiginde de korunsun.
+  $('ui-language').addEventListener('change', async () => {
+    const code = $('ui-language').value;
+    window.I18N.setLanguage(code);
+    try {
+      const res = await fetch('/api/me/language', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ui_language: code }),
+      });
+      flag($('lang-msg'), res.ok ? t('account.langSaved') : t('errors.generic'), res.ok);
+    } catch {
+      flag($('lang-msg'), t('errors.network'), false);
+    }
+    // Sayfadaki sabit metinleri setLanguage cevirdi, ama plan satiri ve mod
+    // maliyetleri JS ile yazildigi icin eski dilde kalirlar; onlari yeniden kurar.
+    load();
+    loadLedger();
   });
 
   load();

@@ -208,7 +208,7 @@ function startProgress() {
   $("#progress-steps").innerHTML = "";
   $("#progress-bar").style.width = "2%";
   $("#progress-pct").textContent = "0%";
-  $("#progress-msg").textContent = t("progress.starting");
+  window.I18N.fill($("#progress-msg"), t("progress.starting"));
   $("#progress-cost").textContent = "";
   $("#cancel-btn").disabled = false;
   $("#cancel-btn").textContent = t("common.cancel");
@@ -250,7 +250,7 @@ function listen(jobId) {
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === "progress") {
-      $("#progress-msg").textContent = data.message;
+      window.I18N.fill($("#progress-msg"), data.message);
       $("#progress-pct").textContent = Math.round(data.pct * 100) + "%";
       $("#progress-bar").style.width = Math.max(2, data.pct * 100) + "%";
       const li = document.createElement("li");
@@ -1074,7 +1074,7 @@ async function loadAccount() {
     me = await res.json();
   } catch {
     pill.className = "pill pill-warn";
-    pill.textContent = t("common.offline");
+    window.I18N.fill(pill, t("common.offline"));
     return null;
   }
 
@@ -1084,15 +1084,16 @@ async function loadAccount() {
 
   if (me.love) {
     pill.className = "pill pill-love";
+    pill.removeAttribute("data-i18n");
     pill.innerHTML = '<span class="love-heart" aria-hidden="true">♥</span> ∞ credits · For my love';
     pill.title = t("top.unlimitedTitle");
   } else if (me.is_admin) {
     pill.className = "pill";
-    pill.textContent = t("common.unlimited");
+    window.I18N.fill(pill, t("common.unlimited"));
   } else {
     const low = me.credits_left <= 40;          // below a default search's typical cost
     pill.className = low ? "pill pill-warn" : "pill";
-    pill.textContent = t("common.credits", { n: me.credits_left });
+    window.I18N.fill(pill, t("common.credits", { n: me.credits_left }));
     pill.title = me.free_limited
       ? t("top.freeLimited")
       : t("top.creditsTitle", { plan: me.plan_label, left: me.credits_left,
