@@ -96,12 +96,14 @@ PROFILES: dict[str, Profile] = {
         summary="Balanced depth: full-text reading and verified numbers.",
         use_case="The everyday setting for a clinical question — enough depth to "
                  "quote a number, without paying for a full review.",
-        # Canlıda ölçüldü (2026-09-19, bekçi yükseltmesinden SONRA): basit bir soru
-        # 0,4736 TL (14 kredi). Yükseltmeden önce ağır sorular 0,595 ve 0,747 TL
-        # ölçülmüştü, yani maliyeti asıl belirleyen sorunun ağırlığı: kaç makale döndüğü
-        # ve özetlerin uzunluğu. Tahmin bu yüzden ucuz uçtaki tek ölçüme değil aralığın
-        # ortasına konur — kullanıcıya olduğundan ucuz görünmek, sonradan beklediğinden
-        # çok kredi düşmekten kötüdür.
+        # Canlıda ölçüldü (2026-09-19, bekçi yükseltmesinden SONRA): hafif bir soru
+        # ("ideal uyku süresi") 0,4736 TL / 14 kredi, gerçek bir klinik soru ("Tip 1
+        # diyabette beyin") 0,6662 TL / 20 kredi. Yükseltmeden önce ağır sorular 0,595 ve
+        # 0,747 TL ölçülmüştü. Maliyeti asıl belirleyen sorunun ağırlığı: kaç makale
+        # döndüğü ve özetlerin uzunluğu. Tahmin bu yüzden ucuz uçtaki ölçüme değil
+        # aralığın üst ortasına konur — kullanıcıya olduğundan ucuz görünmek, sonradan
+        # beklediğinden çok kredi düşmekten kötüdür. 0,70 TL = 21 kredi: ağır soruda
+        # gösterilen ile düşülen neredeyse eşit, hafif soruda kullanıcı lehine sapıyor.
         ceiling_try=1.00, estimate_try=0.70,
         stages={
             "translate": Stage(GEMINI_GUARD_MODEL, 300),
