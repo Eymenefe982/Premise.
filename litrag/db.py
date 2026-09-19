@@ -245,17 +245,31 @@ def is_integrity_error(exc: Exception) -> bool:
 
 
 def _split_statements(script: str) -> list[str]:
-    """Şema betiğini tek tek ifadelere böler (dizge içindeki ';' korunur)."""
+    """Şema betiğini tek tek ifadelere böler: dizge içindeki ';' korunur, `--` yorumları
+    atılır.
+
+    Yorumlar atılmadan bölündüğünde yorumdaki bir ';' ifadeyi ortasından kesiyordu,
+    yorumdaki bir kesme işareti de dizge başlangıcı sanılıyordu. SQLite'ın
+    `executescript`'i yorumları kendisi doğru okuduğu için testler geçiyor, Postgres ise
+    açılışta "syntax error at end of input" ile düşüyordu.
+    """
     statements, current, in_string = [], [], False
-    for ch in script:
+    i, n = 0, len(script)
+    while i < n:
+        ch = script[i]
+        if not in_string and script.startswith("--", i):
+            end = script.find("\n", i)
+            i = n if end == -1 else end            # satır sonu ifadede kalır
+            continue
         if ch == "'":
             in_string = not in_string
         if ch == ";" and not in_string:
-            if current and "".join(current).strip():
+            if "".join(current).strip():
                 statements.append("".join(current).strip())
             current = []
         else:
             current.append(ch)
-    if current and "".join(current).strip():
+        i += 1
+    if "".join(current).strip():
         statements.append("".join(current).strip())
     return statements

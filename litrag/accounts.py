@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS credit_holds (
 CREATE TABLE IF NOT EXISTS deleted_accounts (
     email_hash TEXT PRIMARY KEY,       -- kanonik e-postanin anahtarli ozeti (HMAC)
     credits_used INTEGER NOT NULL,     -- silindigi donemde harcanan kredi
-    period_start TEXT NOT NULL,        -- o donemin basi; donem bitince satir silinir
+    period_start TEXT NOT NULL,        -- o donemin basi, donem bitince satir silinir
     free_eligible INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS free_grants (

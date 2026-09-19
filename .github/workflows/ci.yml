@@ -21,6 +21,9 @@ jobs:
           python-version: "3.14"
           cache: pip
       - run: pip install -r requirements.txt
+      # Testler SQLite'ta koşar; şemanın Postgres'te de ayrıştığını sınamak için
+      # (bkz. tests/test_db.py). Yalnız CI'da, uygulamaya girmez.
+      - run: pip install pglast==8.4
       - run: python -m pytest -q
 
   dependency-audit:
