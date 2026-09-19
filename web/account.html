@@ -119,6 +119,11 @@
       <div class="row"><span class="k">Cancelled search</span><span class="v">free</span></div>
       <div class="row"><span class="k">Period start</span><span class="v" id="period">—</span></div>
     </div>
+    <p class="sub" id="free-limited" hidden style="margin-top:14px">
+      This account has no free monthly credits: several free accounts were recently opened from
+      the same network or browser. Accounts with an institutional email (for example .edu.tr or
+      .gov.tr) are not affected.
+    </p>
   </div>
 
   <!-- credit ledger -->
@@ -146,7 +151,8 @@
     <p class="sub">
       Permanently deletes your account and everything stored under it: search history,
       reports, library, credit history, and cached answers created from your questions.
-      This cannot be undone.
+      This cannot be undone. If you sign up again with the same address this month, the free
+      credits you already used this month stay used.
     </p>
     <div class="inline">
       <input type="password" id="del-pw" placeholder="Your password" autocomplete="current-password">
@@ -207,6 +213,7 @@
     }
 
     $('love-badge').hidden = !me.love;
+    $('free-limited').hidden = !me.free_limited;
     if (me.unlimited || me.is_admin){
       $('credits-left').textContent = '∞';
       $('credits-total').textContent = 'unlimited';

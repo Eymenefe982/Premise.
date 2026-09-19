@@ -1,13 +1,16 @@
 """Kullanıcı hesapları, planlar ve kredi defteri."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import secrets
 import threading
 from datetime import datetime, timedelta
 
-from . import cache, db, meter, modes, security, store
-from .config import ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET, LOVE_EMAIL, PLANS
+from . import abuse, cache, db, meter, modes, security, store
+from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, FREE_ACCOUNTS_PER_SOURCE,
+                     FREE_SOURCE_WINDOW_DAYS, JWT_SECRET, LOVE_EMAIL, PLANS)
 from .logging_setup import mask_email
 from .store import conn, migrate_library
 
@@ -59,6 +62,18 @@ CREATE TABLE IF NOT EXISTS credit_holds (
     instance TEXT NOT NULL,            -- rezervasyonu yapan sunucu süreci
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS deleted_accounts (
+    email_hash TEXT PRIMARY KEY,       -- kanonik e-postanin anahtarli ozeti (HMAC)
+    credits_used INTEGER NOT NULL,     -- silindigi donemde harcanan kredi
+    period_start TEXT NOT NULL,        -- o donemin basi; donem bitince satir silinir
+    free_eligible INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS free_grants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_hash TEXT NOT NULL,         -- ag ya da tarayici kimliginin anahtarli ozeti
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_free_grants_source ON free_grants(source_hash, created_at);
 """
 
 # Bu sürecin kimliği. Açılışta başka bir süreçten kalan rezervasyonlar sahipsiz sayılır:
@@ -94,6 +109,12 @@ def init() -> None:
         # Geçici şifreyle giren kullanıcı kalıcı bir şifre belirleyene kadar işaretli kalır.
         if "must_change_password" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+        # Hesaplar posta kutusuna göre tekildir (bkz. abuse.canonical_email).
+        if "email_canonical" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN email_canonical TEXT")
+        # 0 ise free planın aylık kredisi bu hesaba verilmez (bkz. create_user).
+        if "free_eligible" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN free_eligible INTEGER NOT NULL DEFAULT 1")
         # Kullanıcıdan istenen NCBI anahtarı hiçbir aramada kullanılmıyordu (sunucu kendi
         # anahtarını kullanır). Saklanmış anahtarlar ve onları şifreleyen anahtar silinir:
         # işe yaramayan bir sırrı tutmak yalnızca sızma riski taşır.
@@ -108,6 +129,9 @@ def init() -> None:
         # hesaba bağlı olmadığı için silme talebinde ayıklanamıyordu ve tek kullanımı bir
         # sayaçtı; kaldırılır.
         c.execute("DROP TABLE IF EXISTS searches")
+        _backfill_canonical()
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_canonical"
+                  " ON users(email_canonical)")
         c.commit()
     migrate_library()
     with _lock:
@@ -116,6 +140,29 @@ def init() -> None:
         conn().execute("CREATE INDEX IF NOT EXISTS idx_cache_user ON search_cache(user_id)")
         conn().commit()
     _seed_admin()
+
+
+def _backfill_canonical() -> None:
+    """Eski hesaplara kanonik adres yazar. Kilidin içinden çağrılır.
+
+    Kural gelmeden önce aynı kutuya ait birden çok hesap açılmış olabilir. Onlar
+    kapatılmaz (içlerinde kullanıcının raporları var); kanonik adres yalnız en eskisine
+    yazılır, diğerleri boş kalır. Boş değerler tekil dizinde çakışmaz, yeni bir kayıt
+    ise o kutu için artık açılamaz.
+    """
+    c = conn()
+    rows = c.execute("SELECT id, email FROM users WHERE email_canonical IS NULL"
+                     " ORDER BY id").fetchall()
+    if not rows:
+        return
+    taken = {r["email_canonical"] for r in c.execute(
+        "SELECT email_canonical FROM users WHERE email_canonical IS NOT NULL").fetchall()}
+    for row in rows:
+        canonical = abuse.canonical_email(row["email"])
+        if canonical in taken:
+            continue
+        taken.add(canonical)
+        c.execute("UPDATE users SET email_canonical = ? WHERE id = ?", (canonical, row["id"]))
 
 
 # --------------------------------------------------------------- uygulama sırları
@@ -137,6 +184,14 @@ def jwt_secret() -> str:
     return app_secret("jwt_secret", JWT_SECRET)
 
 
+def _fingerprint(value: str) -> str:
+    """Kötüye kullanım kayıtları için anahtarlı özet. E-posta, IP ve cihaz kimliği açık
+    saklanmaz; anahtar olmadan özetten geri dönülemez (IPv4 uzayı küçük olduğu için
+    anahtarsız bir özet tek tek denenerek çözülebilirdi)."""
+    key = app_secret("abuse_key").encode()
+    return hmac.new(key, value.encode(), hashlib.sha256).hexdigest()
+
+
 # --------------------------------------------------------------------- kullanıcılar
 def _row_to_user(row) -> dict | None:
     return dict(row) if row else None
@@ -151,23 +206,73 @@ def by_email(email: str) -> dict | None:
         "SELECT * FROM users WHERE email = ?", (email.strip().lower(),)).fetchone())
 
 
+def _cutoff(days: int) -> str:
+    return (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _purge_abuse_records() -> None:
+    """Dönemi bitmiş silme kayıtlarını ve penceresi geçmiş kota kayıtlarını siler.
+    Kilidin içinden çağrılır. Bu kayıtlar yalnız süreleri boyunca işe yarar."""
+    conn().execute("DELETE FROM deleted_accounts WHERE period_start < ?",
+                   (_cutoff(PERIOD_DAYS),))
+    conn().execute("DELETE FROM free_grants WHERE created_at < ?",
+                   (_cutoff(FREE_SOURCE_WINDOW_DAYS),))
+
+
 def create_user(email: str, password: str, role: str, plan: str = "free",
-                consented: bool = False) -> dict:
+                consented: bool = False, sources: tuple[str, ...] = ()) -> dict:
+    """Hesabı açar.
+
+    `sources` kaydın geldiği ağ ve tarayıcıdır (ör. "ip:1.2.3.4", "device:..."). Bu
+    kaynakların herhangi birinden son FREE_SOURCE_WINDOW_DAYS günde FREE_ACCOUNTS_PER_SOURCE
+    hesap ücretsiz kredi almışsa yeni hesap açılır ama free kredisi verilmez. Kurumsal
+    adresler bu sayıma girmez. Aynı kutu dönem içinde silinip yeniden açıldıysa dönemin
+    harcaması ve kota durumu geri yüklenir: silip açmak krediyi sıfırlamaz.
+    """
     email = email.strip().lower()
+    canonical = abuse.canonical_email(email)
+    # Özetler kilitten önce alınır: app_secret aynı kilidi kullanır.
+    email_hash = _fingerprint("email:" + canonical)
+    counted = () if abuse.is_institutional(email) else tuple(
+        dict.fromkeys(_fingerprint(s) for s in sources if s))
     with _lock:
+        c = conn()
+        _purge_abuse_records()
+        window = _cutoff(FREE_SOURCE_WINDOW_DAYS)
+        eligible = all(
+            c.execute("SELECT COUNT(*) AS n FROM free_grants WHERE source_hash = ?"
+                      " AND created_at >= ?", (h, window)).fetchone()["n"]
+            < FREE_ACCOUNTS_PER_SOURCE
+            for h in counted)
+        used, period = 0, _now()
+        tomb = c.execute("SELECT credits_used, period_start, free_eligible"
+                         " FROM deleted_accounts WHERE email_hash = ?",
+                         (email_hash,)).fetchone()
+        if tomb:
+            used, period = int(tomb["credits_used"]), tomb["period_start"]
+            eligible = eligible and bool(tomb["free_eligible"])
         try:
-            cur = conn().execute(
-                "INSERT INTO users (email, password_hash, role, plan, period_start,"
-                " kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?)",
-                (email, security.hash_password(password), role, plan, _now(),
-                 _now() if consented else None, _now()),
+            cur = c.execute(
+                "INSERT INTO users (email, email_canonical, password_hash, role, plan,"
+                " credits_used, period_start, free_eligible, kvkk_consent_at, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (email, canonical, security.hash_password(password), role, plan, used,
+                 period, int(eligible), _now() if consented else None, _now()),
             )
-            conn().commit()
         except Exception as exc:
             if not db.is_integrity_error(exc):
                 raise
             raise ValueError("Something went wrong. If you already have an account, "
                              "please try signing in.")
+        if eligible:
+            for h in counted:
+                c.execute("INSERT INTO free_grants (source_hash, created_at) VALUES (?,?)",
+                          (h, _now()))
+        if tomb:
+            c.execute("DELETE FROM deleted_accounts WHERE email_hash = ?", (email_hash,))
+        c.commit()
+    if not eligible:
+        log.info("free credits withheld for %s (source quota)", mask_email(email))
     return by_id(int(cur.lastrowid))
 
 
@@ -280,17 +385,19 @@ def _seed_admin() -> None:
         # gerektiğinde, sütun listesine dahil edilerek gönderilir.
         if empty:
             conn().execute(
-                "INSERT INTO users (id, email, password_hash, role, plan, period_start,"
-                " kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                (1, ADMIN_EMAIL, security.hash_password(ADMIN_PASSWORD),
+                "INSERT INTO users (id, email, email_canonical, password_hash, role, plan,"
+                " period_start, kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (1, ADMIN_EMAIL, abuse.canonical_email(ADMIN_EMAIL),
+                 security.hash_password(ADMIN_PASSWORD),
                  "admin", "pro", _now(), _now(), _now()),
             )
             conn().fix_serial("users")
         else:
             conn().execute(
-                "INSERT INTO users (email, password_hash, role, plan, period_start,"
-                " kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?)",
-                (ADMIN_EMAIL, security.hash_password(ADMIN_PASSWORD),
+                "INSERT INTO users (email, email_canonical, password_hash, role, plan,"
+                " period_start, kvkk_consent_at, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (ADMIN_EMAIL, abuse.canonical_email(ADMIN_EMAIL),
+                 security.hash_password(ADMIN_PASSWORD),
                  "admin", "pro", _now(), _now(), _now()),
             )
         conn().commit()
@@ -315,6 +422,22 @@ def plan_of(user: dict) -> dict:
     return PLANS.get(user.get("plan") or "free", PLANS["free"])
 
 
+def _allowance(plan: str | None, free_eligible, credits_extra) -> int:
+    """Dönemlik kredi hakkı: plan kredisi + satın alınan/verilen ek kredi. Kotaya
+    takılmış bir free hesabın plan kredisi sıfırdır; ücretli planda kota önemsizdir."""
+    plan = plan or "free"
+    base = PLANS.get(plan, PLANS["free"])["credits"]
+    if plan == "free" and free_eligible is not None and not int(free_eligible):
+        base = 0
+    return base + int(credits_extra or 0)
+
+
+def is_free_limited(user: dict) -> bool:
+    """Free planda olup aylık ücretsiz kredisi kota yüzünden verilmeyen hesap."""
+    return ((user.get("plan") or "free") == "free" and not is_unlimited(user)
+            and user.get("free_eligible") is not None and not int(user["free_eligible"]))
+
+
 def roll_period(user: dict) -> dict:
     """Dönem dolduysa aylık kredi kullanımını sıfırlar."""
     started = datetime.strptime(user["period_start"], "%Y-%m-%d %H:%M:%S")
@@ -331,7 +454,7 @@ def balance(user: dict) -> int | None:
     """Kalan kredi. Yönetici ve özel hesap için sınır yoktur, None döner."""
     if is_unlimited(user):
         return None
-    allowance = plan_of(user)["credits"] + int(user["credits_extra"] or 0)
+    allowance = _allowance(user.get("plan"), user.get("free_eligible"), user["credits_extra"])
     return max(0, allowance - int(user["credits_used"] or 0))
 
 
@@ -381,12 +504,11 @@ def reserve(user_id: int, amount: int, hold_id: str | None = None) -> bool:
         return True
     with _lock:
         row = conn().execute(
-            "SELECT plan, credits_used, credits_extra FROM users WHERE id = ?",
+            "SELECT plan, credits_used, credits_extra, free_eligible FROM users WHERE id = ?",
             (user_id,)).fetchone()
         if row is None:
             return False
-        allowance = (PLANS.get(row["plan"] or "free", PLANS["free"])["credits"]
-                     + int(row["credits_extra"] or 0))
+        allowance = _allowance(row["plan"], row["free_eligible"], row["credits_extra"])
         if int(row["credits_used"] or 0) + amount > allowance:
             return False
         conn().execute("UPDATE users SET credits_used = credits_used + ? WHERE id = ?",
@@ -589,9 +711,27 @@ def delete_account(user_id: int) -> dict:
     hâlâ vardır ve kullanıcı silmeyi tekrar deneyebilir. Yönetici hesapları ortam
     değişkeninden tohumlandığı için buradan silinmez (bkz. app.delete_me).
     """
+    user = by_id(user_id)
+    tomb_hash = None
+    if user and not is_unlimited(user):
+        user = roll_period(user)
+        tomb_hash = _fingerprint("email:" + abuse.canonical_email(user["email"]))
     removed = store.delete_user_content(user_id)
     removed["cache"] = cache.delete_for_user(user_id)
     with _lock:
+        # Silip yeniden açmak dönemin kredisini sıfırlamasın diye yalnız harcama ve
+        # dönem başı, e-postanın geri çevrilemez özetiyle dönem bitene kadar tutulur.
+        # Harcama free hakkıyla sınırlanır: korunan şey bedava kredidir, satın alınan
+        # ek kredinin harcaması yeni hesaba borç olarak taşınmaz.
+        if tomb_hash:
+            _purge_abuse_records()
+            conn().execute(
+                "INSERT INTO deleted_accounts (email_hash, credits_used, period_start,"
+                " free_eligible) VALUES (?,?,?,?) ON CONFLICT (email_hash) DO UPDATE SET"
+                " credits_used = excluded.credits_used, period_start = excluded.period_start,"
+                " free_eligible = excluded.free_eligible",
+                (tomb_hash, min(int(user["credits_used"] or 0), PLANS["free"]["credits"]),
+                 user["period_start"], 0 if is_free_limited(user) else 1))
         removed["holds"] = conn().execute(
             "DELETE FROM credit_holds WHERE user_id = ?", (user_id,)).rowcount
         removed["ledger"] = conn().execute(
@@ -622,7 +762,9 @@ def public(user: dict) -> dict:
         "plan": user["plan"],
         "plan_label": plan["label"],
         "is_admin": is_admin(user),
-        "credits_total": None if is_unlimited(user) else plan["credits"] + int(user["credits_extra"] or 0),
+        "credits_total": None if is_unlimited(user) else _allowance(
+            user.get("plan"), user.get("free_eligible"), user["credits_extra"]),
+        "free_limited": is_free_limited(user),
         "credits_left": balance(user),
         "unlimited": is_unlimited(user),
         "love": is_love(user),

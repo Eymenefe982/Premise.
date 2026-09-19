@@ -263,6 +263,7 @@ litrag/
   mailer.py             İşlemsel e-posta (Brevo HTTP API; arka planda gönderilir)
   db.py                 Veritabanı katmanı: yerelde SQLite, canlıda Postgres
   accounts.py           Hesaplar, kredi defteri ve arama başına kredi rezervasyonu
+  abuse.py              Kanonik e-posta, geçici posta listesi, kurumsal adres tespiti
   store.py              Arama geçmişi ve kütüphane
   cache.py              Arama önbelleği (normalleştirilmiş sorgu anahtarı, 7 gün)
   exporters.py          Word / RIS / BibTeX / Markdown / CSV
@@ -284,7 +285,14 @@ litrag/
 - Kullanıcı hesabını hesap sayfasından şifresiyle onaylayarak silebilir (`DELETE /api/me`).
   Raporlar, kütüphane, kredi defteri, jetonlar, rezervasyonlar ve kullanıcının sorularından
   üretilmiş önbellek satırları kalıcı olarak silinir. Arama sürerken silme reddedilir; yönetici
-  hesabı uygulamadan silinemez.
+  hesabı uygulamadan silinemez. Silip yeniden kaydolmak bedava krediyi sıfırlamasın diye
+  e-postanın anahtarlı özeti, o dönemin harcamasıyla dönem bitene kadar (en çok 30 gün) tutulur.
+- Bedava kredi çok hesapla toplanamaz (`abuse.py`): hesaplar posta kutusuna göre tekildir
+  (Gmail noktaları, `+etiket`, `googlemail.com` aynı hesap sayılır), geçici posta servisleriyle
+  kayıt olunamaz, aynı ağdan ya da tarayıcıdan 30 günde yalnız ilk 3 hesap free kredi alır.
+  Kurumsal adresler (`.edu.tr`, `.gov.tr`) bu kotaya girmez. Eşikler `FREE_CREDITS`,
+  `FREE_ACCOUNTS_PER_SOURCE`, `FREE_SOURCE_WINDOW_DAYS` ve `INSTITUTIONAL_EMAIL_SUFFIXES`
+  ortam değişkenleriyle ayarlanır.
 - Sorgu metni hesaba bağlı olmayan hiçbir tabloda süresiz tutulmaz.
 
 ## Sınırlar

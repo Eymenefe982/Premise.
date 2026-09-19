@@ -128,6 +128,24 @@
     your questions or results. They are kept by our hosting provider (Render) for a limited
     period and then rotated out.
   </p>
+  <p id="free-credits">
+    <b>Protecting free credits.</b> Every account receives free monthly credits, and each
+    search costs us real money. To stop one person from collecting them through many accounts,
+    we keep two small records. Both use a keyed, one-way fingerprint: the original email
+    address, IP address or browser ID cannot be read back from them.
+  </p>
+  <ul>
+    <li>When an account is created, fingerprints of the network it came from (IP address) and
+      of a random browser ID (the <code>premise_device</code> cookie below) are stored with the
+      date, without any link to the account. Only a few free accounts per network or browser
+      receive free credits within 30 days. These records are deleted after 30 days.
+      University and public-institution addresses (for example <code>.edu.tr</code>,
+      <code>.gov.tr</code>) are not counted.</li>
+    <li>When you delete your account, a fingerprint of your email address is kept together with
+      the credits you used in the current monthly period and the date that period started, so
+      that deleting and signing up again does not restart free credits. It is deleted when that
+      period ends (at most 30 days), or as soon as you sign up again, whichever comes first.</li>
+  </ul>
 
   <h2>4. Special-category data and cross-border transfer</h2>
   <p>
@@ -139,15 +157,20 @@
 
   <h2 id="cookies">Cookies</h2>
   <p>
-    Premise sets only two cookies, both strictly necessary to keep you signed in:
+    Premise sets only three cookies, all strictly necessary: two keep you signed in, and one
+    protects free credits from being collected through many accounts:
   </p>
   <table>
     <tr><th>Cookie</th><th>Purpose</th><th>Lifetime</th></tr>
     <tr><td>premise_session</td><td>Short-lived sign-in session</td><td>2 hours</td></tr>
     <tr><td>premise_refresh</td><td>Keeps you signed in between visits</td><td>30 days from sign-in</td></tr>
+    <tr><td>premise_device</td><td>A random browser ID, set when you sign up. Used only to count
+      how many free accounts were opened from this browser (see
+      <a href="#free-credits">section 3</a>); it is not linked to your account or used to
+      follow you</td><td>1 year</td></tr>
   </table>
   <p>
-    Both are HTTP-only (not readable by scripts) and sent only over HTTPS. We do not use
+    All three are HTTP-only (not readable by scripts) and sent only over HTTPS. We do not use
     advertising, tracking or third-party cookies. If usage statistics are enabled, they are
     collected with a cookieless, privacy-friendly counter that does not identify you or follow
     you across sites.
@@ -170,8 +193,10 @@
     You can delete your account yourself at any time from your account page
     (<a href="/hesap">My account</a> → Delete account). Deletion is immediate and permanent: it
     removes your account, search history and reports, library, credit history, and the cached
-    answers created from your questions. Only the masked security log lines described in section 3
-    remain until the hosting provider rotates them out.
+    answers created from your questions. What remains: the masked security log lines described in
+    section 3 until the hosting provider rotates them out, and the one-way fingerprint of your
+    email address with this period's credit usage, for at most 30 days
+    (<a href="#free-credits">section 3</a>).
   </p>
   <p>
     Deleting your account also withdraws your consent. To request a copy of your data, or if you

@@ -10,6 +10,7 @@ import io
 import json
 import os
 import queue
+import secrets
 import threading
 import time
 import uuid
@@ -28,7 +29,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from litrag import accounts, cache, exporters, mailer, security, store
+from litrag import abuse, accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, ANALYTICS_SITE,
                            ANALYTICS_SRC, APP_NAME, APP_URL,
                            COOKIE_SECURE, DATABASE_URL, DB_IS_EPHEMERAL, DB_PATH, FORCE_HTTPS,
@@ -152,6 +153,10 @@ async def _unhandled_error(request: Request, exc: Exception):
 
 ACCESS_COOKIE = "premise_session"
 REFRESH_COOKIE = "premise_refresh"
+# Rastgele tarayıcı kimliği. Kişiyi tanımlamaz, izleme için kullanılmaz; yalnız aynı
+# tarayıcıdan açılan hesapların ücretsiz kredi kotasını saymaya yarar (bkz. abuse.py).
+DEVICE_COOKIE = "premise_device"
+DEVICE_COOKIE_DAYS = 365
 
 # job_id -> {"events": Queue, "user_id": int, "finished_at": float | None}
 _jobs: dict[str, dict] = {}
@@ -164,6 +169,16 @@ _cancelled: set[str] = set()
 def _set_cookie(response: Response, name: str, token: str, max_age: int) -> None:
     response.set_cookie(name, token, max_age=max_age, httponly=True,
                         samesite="lax", secure=COOKIE_SECURE, path="/")
+
+
+def _device_id(request: Request, response: Response) -> str:
+    """Tarayıcının kimliği; yoksa üretilip çereze yazılır. Oturum kapatılınca silinmez:
+    aynı tarayıcıdan çıkış yapıp yeni hesap açmak kotayı sıfırlamasın."""
+    value = request.cookies.get(DEVICE_COOKIE, "")
+    if not (16 <= len(value) <= 64 and value.replace("-", "").replace("_", "").isalnum()):
+        value = secrets.token_urlsafe(18)
+    _set_cookie(response, DEVICE_COOKIE, value, DEVICE_COOKIE_DAYS * 86400)
+    return value
 
 
 def _login_response(response: Response, user: dict) -> dict:
@@ -260,13 +275,19 @@ async def signup(body: SignupIn, request: Request, response: Response) -> dict:
         # Bota neyin yakalandığı söylenmez; genel bir hata yeterli.
         audit("signup", email=str(body.email), ip=ip, ok=False, reason="honeypot")
         raise HTTPException(400, "Something went wrong. Please try again.")
+    if abuse.is_disposable(str(body.email)):
+        audit("signup", email=str(body.email), ip=ip, ok=False, reason="disposable")
+        raise HTTPException(400, "Please sign up with a permanent email address. "
+                                 "Temporary inboxes are not accepted.")
+    sources = (f"ip:{abuse.network_of(ip)}", f"device:{_device_id(request, response)}")
     try:
         user = accounts.create_user(str(body.email), body.password, body.role,
-                                    consented=body.kvkk_consent)
+                                    consented=body.kvkk_consent, sources=sources)
     except ValueError as exc:
         audit("signup", email=str(body.email), ip=ip, ok=False, reason="rejected")
         raise HTTPException(409, str(exc))
-    audit("signup", user_id=user["id"], email=user["email"], ip=ip)
+    audit("signup", user_id=user["id"], email=user["email"], ip=ip,
+          free_limited=accounts.is_free_limited(user))
     _send_verification(user)
     mailer.send_welcome(user["email"])
     return _login_response(response, user)
@@ -535,6 +556,11 @@ async def start_search(body: SearchIn, request: Request,
     needed = accounts.max_cost_of(req)
     if not accounts.reserve(user["id"], needed, hold_id=job_id):
         left = accounts.balance(user)
+        if accounts.is_free_limited(user):
+            raise HTTPException(402, "This account has no free monthly credits: several "
+                                     "free accounts were recently opened from the same "
+                                     "network or browser. Sign up with your institutional "
+                                     "email (e.g. .edu.tr or .gov.tr), or upgrade your plan.")
         raise HTTPException(402, f"This search needs {needed} credits, you have "
                                  f"{left} left. You can upgrade your plan or "
                                  f"buy extra credits.")

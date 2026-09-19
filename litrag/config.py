@@ -159,22 +159,38 @@ REQUIRE_EMAIL_VERIFICATION = os.getenv("REQUIRE_EMAIL_VERIFICATION", "0").strip(
 # --- Kredi sistemi ---
 # Kredi artık makale/tam metin formülünden değil, aramanın gerçekten harcadığı token
 # maliyetinden hesaplanır (bkz. meter.py). 1 kredi = CREDIT_TRY kadar gerçek API gideri.
-# Free planın 150 kredisi bu orana göre tam 5 TL'lik bir tavan demektir.
+# Bir planın aylık kredisi, o planın bize aylık en yüksek API giderini doğrudan belirler.
 CREDIT_TRY = float(os.getenv("CREDIT_TRY", "0.0333"))
 
-# Ücretli katman henüz açılmadı: her hesap aynı tavanı paylaşır. 150 kredi,
-# CREDIT_TRY oranıyla tam olarak 5 TL'lik gerçek API giderine denktir — yani tek bir
-# hesabın bize maliyeti hiçbir koşulda 5 TL'yi geçemez. Satış açıldığında planlar
-# burada kredi sayısı ve fiyatla ayrışacak; anahtarlar o gün için duruyor.
+# Free: 90 kredi = en fazla 3 TL/ay gider, tavandan hesapla en az 3 medium arama. High
+# arama 150 kredi rezerve ettiği için free bakiyesi ona zaten yetmez; mod da kapalıdır.
+# Bedava kredi tamamen kaldırılamaz ama küçük tutulur: çok hesap açan birinin her
+# hesaptan alabileceği bu kadardır (bkz. abuse.py).
+FREE_CREDITS = int(os.getenv("FREE_CREDITS", "90"))
+
+# Ücretli katman henüz açılmadı. 150 kredi = 5 TL'lik gerçek API gideri. Satış
+# açıldığında planlar burada kredi sayısı ve fiyatla ayrışacak; anahtarlar o gün için duruyor.
 ACCOUNT_CREDITS = int(os.getenv("ACCOUNT_CREDITS", "150"))
 _SHARED_PLAN = {"credits": ACCOUNT_CREDITS, "fulltext": True, "price_try": 0,
                 "modes": ("medium", "high")}
 
 PLANS = {
-    "free":    {"label": "Free", **_SHARED_PLAN},
+    "free":    {"label": "Free", "credits": FREE_CREDITS, "fulltext": True, "price_try": 0,
+                "modes": ("medium",)},
     "asistan": {"label": "Assistant", **_SHARED_PLAN},
     "pro":     {"label": "Pro", **_SHARED_PLAN},
 }
+
+# --- Ücretsiz kredinin çok hesapla toplanmasına karşı (bkz. abuse.py) ---
+# Aynı ağdan (IP) ya da aynı tarayıcıdan son FREE_SOURCE_WINDOW_DAYS günde en fazla bu
+# kadar hesap ücretsiz aylık kredi alır; sonrakiler hesap açabilir ama free kredisi 0'dır.
+FREE_ACCOUNTS_PER_SOURCE = int(os.getenv("FREE_ACCOUNTS_PER_SOURCE", "3"))
+FREE_SOURCE_WINDOW_DAYS = int(os.getenv("FREE_SOURCE_WINDOW_DAYS", "30"))
+# Hastane ve üniversite ağlarında herkes tek IP'den çıkar; bu alan adlarındaki adresler
+# kotaya takılmaz ve kotayı doldurmaz. Hedef kitle zaten bunlar, toplu açmak da zor.
+INSTITUTIONAL_EMAIL_SUFFIXES = tuple(
+    s.strip().lower().lstrip(".") for s in
+    os.getenv("INSTITUTIONAL_EMAIL_SUFFIXES", "edu.tr,gov.tr,edu").split(",") if s.strip())
 
 # Kayıt sırasında seçilebilecek roller. Genel halk 2. faza kadar kapalı (bkz. plan, madde 3).
 SIGNUP_ROLES = ("physician", "student")

@@ -314,8 +314,9 @@ def _used(user_id):
 
 def test_reservation_is_refunded_after_a_restart(client, monkeypatch):
     user = accounts.by_id(_signup(client, "restart@example.com").json()["id"])
-    assert accounts.reserve(user["id"], 150, hold_id="job-a")
-    assert _used(user["id"]) == 150
+    full = accounts.balance(user)                                  # hesabın tamamı
+    assert accounts.reserve(user["id"], full, hold_id="job-a")
+    assert _used(user["id"]) == full
     monkeypatch.setattr(accounts, "INSTANCE_ID", "yeni-surec")    # sunucu yeniden başladı
     assert accounts.release_stale_holds() == 1
     assert _used(user["id"]) == 0

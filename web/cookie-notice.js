@@ -1,4 +1,5 @@
-// Premise yalnızca oturum için zorunlu çerezler kullanır; bunlar onay gerektirmez.
+// Premise yalnızca zorunlu çerezler kullanır (oturum ve bedava kredinin toplu kayda karşı
+// korunması); bunlar onay gerektirmez.
 // Bu yüzden "kabul et / reddet" değil, bir kez gösterilen bir bilgilendirme.
 (function () {
   var KEY = 'premise_cookie_notice';
@@ -14,7 +15,8 @@
 
   var text = document.createElement('span');
   text.style.flex = '1';
-  text.innerHTML = 'We only use essential cookies to keep you signed in. No tracking or ' +
+  text.innerHTML = 'We only use essential cookies: to keep you signed in and to protect free ' +
+    'credits from bulk sign-ups. No tracking or ' +
     'advertising cookies. <a href="/gizlilik#cookies" style="color:#7fd3c9">Learn more</a>';
 
   var btn = document.createElement('button');

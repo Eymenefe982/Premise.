@@ -44,3 +44,20 @@ def _clean_throttles():
         with throttle._lock:
             throttle._hits.clear()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _clean_abuse_records():
+    """Bütün testler aynı istemci IP'sinden kayıt olur. Ücretsiz kredi kotası ve silinen
+    hesap kayıtları testler arasında temizlenmezse dördüncü testin hesabı kredisiz açılır.
+    Tablolar ilk `accounts.init()`'ten önce yoktur; o durumda silinecek bir şey de yoktur."""
+    from litrag import accounts
+    from litrag.store import conn
+    with accounts._lock:
+        for table in ("free_grants", "deleted_accounts"):
+            try:
+                conn().execute(f"DELETE FROM {table}")
+            except Exception:
+                pass
+        conn().commit()
+    yield

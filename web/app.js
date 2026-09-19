@@ -1064,7 +1064,9 @@ async function loadAccount() {
     const low = me.credits_left <= 40;          // below a default search's typical cost
     pill.className = low ? "pill pill-warn" : "pill";
     pill.textContent = `${me.credits_left} credits`;
-    pill.title = `${me.plan_label} plan · ${me.credits_left} of ${me.credits_total} credits left`;
+    pill.title = me.free_limited
+      ? "No free monthly credits on this account (too many free accounts from this network or browser)."
+      : `${me.plan_label} plan · ${me.credits_left} of ${me.credits_total} credits left`;
   }
 
   // Güç modları: plana kapalı olanlar seçilemez, açık olanlar kredi tahminini gösterir.

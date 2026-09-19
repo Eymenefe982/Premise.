@@ -235,14 +235,28 @@ def test_request_without_a_mode_still_prices(monkeypatch):
 @pytest.mark.parametrize("plan", sorted(PLANS))
 def test_every_account_costs_us_at_most_five_lira(plan):
     """Ücretli katman açılana kadar hiçbir hesap bize 5 TL'den fazlaya mal olamaz."""
-    assert PLANS[plan]["credits"] * CREDIT_TRY == pytest.approx(5.0, abs=0.05)
+    assert PLANS[plan]["credits"] * CREDIT_TRY <= 5.0 + 0.05
 
 
-def test_one_high_power_search_fits_in_an_account_budget():
-    """Tavan, en pahalı modun tek bir aramasını karşılayabilmeli; yoksa yüksek güç
-    hiçbir hesapta çalıştırılamaz."""
-    budget = min(p["credits"] for p in PLANS.values())
-    assert budget >= meter.credits_for(modes.profile("high").ceiling_try)
+def test_a_free_account_costs_us_at_most_three_lira():
+    """Bedava kredi çok hesapla çoğaltılabilir; hesap başına tavanı küçük tutulur."""
+    assert PLANS["free"]["credits"] * CREDIT_TRY <= 3.0 + 0.05
+
+
+def test_free_plan_guarantees_three_medium_searches_and_no_high():
+    """Free, medium'un tavan maliyetiyle bile 3 arama karşılar. High açık olsaydı 150
+    kredi rezervi hiçbir free bakiyeye sığmaz, kullanıcı yalnızca 402 görürdü."""
+    medium_max = meter.credits_for(modes.profile("medium").ceiling_try)
+    assert PLANS["free"]["credits"] >= 3 * medium_max
+    assert "high" not in PLANS["free"]["modes"]
+
+
+@pytest.mark.parametrize("plan", sorted(PLANS))
+def test_every_allowed_mode_fits_in_the_plan_budget(plan):
+    """Plana açık her mod, o planın bakiyesine en az bir kez sığmalı; yoksa mod seçilebilir
+    görünür ama hiçbir zaman çalıştırılamaz."""
+    for mode in PLANS[plan]["modes"]:
+        assert PLANS[plan]["credits"] >= meter.credits_for(modes.profile(mode).ceiling_try)
 
 
 # ---------------------------------------------------------------- önbellek
