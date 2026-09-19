@@ -5,43 +5,39 @@ import logging
 import json
 import re
 import threading
-import warnings
 
-warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
-warnings.filterwarnings("ignore", message=".*google.generativeai.*")
+from google import genai
+from google.genai import types
 
-import google.generativeai as genai  # noqa: E402
-from google.generativeai import client as genai_client  # noqa: E402
-
-from . import modes  # noqa: E402
-from .config import GEMINI_API_KEYS, GEMINI_FAST_MODEL  # noqa: E402
+from . import modes
+from .config import GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_TIMEOUT_SECONDS
 
 log = logging.getLogger("premise.llm")
 
 # Son çalışan anahtar. Yeni çağrılar buradan başlar; kotası dolan anahtar bir sonrakine
 # devreder ve havuz bir çağrıda en fazla bir kez dolaşılır.
 _key_index = 0
-# genai.configure() süreç genelindedir; yalnızca anahtara bağlı istemcinin üretimi bu
-# kilidin altında yapılır. Ağ çağrısının kendisi kilidin dışındadır: önceden kilit çağrı
-# boyunca tutuluyor, bütün kullanıcıların bütün model çağrıları sıraya giriyordu.
-_api_lock = threading.Lock()
-_clients: dict[str, object] = {}
-
-if GEMINI_API_KEYS:
-    genai.configure(api_key=GEMINI_API_KEYS[0])
+# Anahtar başına bir istemci. google-genai'de anahtar istemcinin içindedir; eski SDK'daki
+# süreç geneli genai.configure() yoktur, yani eşzamanlı çağrılar birbirinin anahtarını
+# değiştiremez. Kilit yalnızca bu sözlüğü korur, ağ çağrıları paralel çalışır.
+_clients_lock = threading.Lock()
+_clients: dict[str, genai.Client] = {}
 
 
 class LLMError(RuntimeError):
     pass
 
 
-def _client_for(key: str):
-    """Anahtara bağlı, iş parçacıkları arasında paylaşılabilen istemci (anahtar başına bir)."""
-    with _api_lock:
+def _client_for(key: str) -> genai.Client:
+    """Anahtara bağlı, iş parçacıkları arasında paylaşılabilen istemci (anahtar başına bir).
+
+    Zaman aşımı vardır: eski SDK'da yoktu ve yanıt vermeyen bir çağrı aramayı (ve
+    kullanıcının rezerve kredisini) süresiz bekletebilirdi."""
+    with _clients_lock:
         cli = _clients.get(key)
         if cli is None:
-            genai.configure(api_key=key)
-            cli = genai_client.get_default_generative_client()
+            cli = genai.Client(api_key=key, http_options=types.HttpOptions(
+                timeout=int(GEMINI_TIMEOUT_SECONDS * 1000)))
             _clients[key] = cli
         return cli
 
@@ -54,9 +50,9 @@ def _is_quota_error(exc: Exception) -> bool:
 def _gen_config(stage: modes.Stage, json_mode: bool) -> dict:
     """Aşamanın üretim ayarı.
 
-    Thinking burada ayrıca ayarlanmaz: kullanılan `google.generativeai` sürümü
-    `thinking_level`/`thinking_budget` alanlarını reddediyor. Pratikte gerek de yok —
-    thinking token'ları çıktı sınırının içinden harcanır, dolayısıyla maliyet freni
+    Thinking burada ayrıca ayarlanmaz: modelin varsayılanı korunur, çünkü mod
+    profillerindeki maliyetler o varsayılanla ölçüldü (bkz. modes.py). Thinking
+    token'ları çıktı sınırının içinden harcanır, dolayısıyla maliyet freni
     `max_output_tokens`'tır.
     """
     config: dict = {"max_output_tokens": stage.max_output_tokens}
@@ -75,7 +71,9 @@ def _response_text(response) -> str:
     try:
         candidates = getattr(response, "candidates", None) or []
         parts = getattr(getattr(candidates[0], "content", None), "parts", None) or []
-        return "".join(getattr(p, "text", "") or "" for p in parts).strip()
+        # Düşünme parçaları (istenirse dönerler) cevabın parçası değildir.
+        return "".join(getattr(p, "text", "") or "" for p in parts
+                       if not getattr(p, "thought", False)).strip()
     except (AttributeError, IndexError, TypeError):
         return ""
 
@@ -94,12 +92,14 @@ def _generate_with_model(model_name: str, prompt: str, system: str, config: dict
     for step in range(count):
         index = (start + step) % count
         try:
-            model = genai.GenerativeModel(model_name=model_name,
-                                          system_instruction=system or None)
-            # Modeli anahtarın kendi istemcisine bağla: çağrı sırasında başka bir
-            # iş parçacığı genai.configure() çağırsa bile bu model etkilenmez.
-            model._client = _client_for(GEMINI_API_KEYS[index])
-            response = model.generate_content(prompt, generation_config=config)
+            response = _client_for(GEMINI_API_KEYS[index]).models.generate_content(
+                model=model_name, contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system or None,
+                    # Araç çağırma kullanılmıyor; açık kalırsa SDK her çağrıda uyarı basar.
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        disable=True),
+                    **config))
         except Exception as exc:
             if _is_quota_error(exc):
                 if step + 1 < count:

@@ -114,20 +114,21 @@ def test_search_query_with_nul_is_rejected(client):
 
 # ----------------------------------------------------------------------- Gemini
 class _Model:
+    """Sahte google-genai istemcisi: `client.models.generate_content(...)`."""
     behaviour: dict[str, str] = {}
     calls: list[str] = []
     delay = 0.0
 
-    def __init__(self, **_):
-        self._client = None
+    def __init__(self, key: str):
+        self.key = key
+        self.models = self
 
     def generate_content(self, *_a, **_k):
-        key = self._client
-        _Model.calls.append(key)
+        _Model.calls.append(self.key)
         time.sleep(_Model.delay)
-        if _Model.behaviour.get(key) == "quota":
+        if _Model.behaviour.get(self.key) == "quota":
             raise RuntimeError("429 RESOURCE_EXHAUSTED quota")
-        return f"ok:{key}"
+        return f"ok:{self.key}"
 
 
 @pytest.fixture()
@@ -135,9 +136,14 @@ def fake_gemini(monkeypatch):
     _Model.behaviour, _Model.calls, _Model.delay = {}, [], 0.0
     monkeypatch.setattr(llm, "GEMINI_API_KEYS", ["k0", "k1", "k2"])
     monkeypatch.setattr(llm, "_key_index", 0)
-    monkeypatch.setattr(llm, "_client_for", lambda key: key)   # istemci = anahtar adı
-    monkeypatch.setattr(llm.genai, "GenerativeModel", _Model)
+    monkeypatch.setattr(llm, "_client_for", _Model)            # anahtar başına istemci
     return _Model
+
+
+def test_client_is_bound_to_its_key_and_reused():
+    first, again = llm._client_for("anahtar-a"), llm._client_for("anahtar-a")
+    assert first is again and first is not llm._client_for("anahtar-b")
+    llm._clients.clear()
 
 
 def test_quota_on_first_key_moves_to_the_next(fake_gemini):

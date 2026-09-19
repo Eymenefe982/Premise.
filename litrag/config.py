@@ -24,6 +24,9 @@ GEMINI_FAST_MODEL = os.getenv("GEMINI_FAST_MODEL", GEMINI_MODEL).strip()
 GEMINI_HIGH_MODEL = os.getenv("GEMINI_HIGH_MODEL", "gemini-3.6-flash").strip()
 GEMINI_MID_MODEL = os.getenv("GEMINI_MID_MODEL", "gemini-3.5-flash-lite").strip()
 GEMINI_LITE_MODEL = os.getenv("GEMINI_LITE_MODEL", "gemini-3.1-flash-lite").strip()
+# Tek bir model çağrısının en uzun süresi. Yüksek modun sentezi (10.000 token'a kadar)
+# bunun rahatça altında kalır; aşan çağrı hata sayılır, arama ücretlendirilmez.
+GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "180"))
 
 # --- Maliyet ölçümü ---
 USD_TRY = float(os.getenv("USD_TRY", "49"))

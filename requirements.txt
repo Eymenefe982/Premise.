@@ -1,16 +1,18 @@
-fastapi
-uvicorn
-pydantic
-argon2-cffi
-PyJWT
-cryptography
-python-dotenv
-httpx
-google-generativeai
-reportlab
-python-docx
-biopython
-pytest
-email-validator
-psycopg[binary]
-defusedxml
+# Doğrudan bağımlılıklar, test edilmiş sürümlere sabitlenmiştir: her Render deploy'u
+# aynı paketleri kurar. Güncellemeleri Dependabot haftalık PR olarak önerir, CI sınar.
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic==2.13.5
+email-validator==2.3.0
+argon2-cffi==25.1.0
+cryptography==50.0.1
+PyJWT==2.14.0
+python-dotenv==1.2.3
+httpx==0.28.1
+google-genai==2.24.0
+reportlab==5.0.1
+python-docx==1.2.0
+biopython==1.88
+psycopg[binary]==3.3.6
+defusedxml==0.7.1
+pytest==9.1.1
