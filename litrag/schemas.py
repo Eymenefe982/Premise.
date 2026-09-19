@@ -7,6 +7,10 @@ from typing import Literal
 from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from .config import DEFAULT_UI_LANGUAGE, UI_LANGUAGES
+
+# Cevabın yazılacağı dil. Arayüz dilinden (config.UI_LANGUAGES) ayrıdır: modeli herhangi
+# bir dilde yazdırabiliriz, ama arayüz metinlerinin çevrilmiş olması gerekir.
 LANGUAGES = ("English", "Türkçe", "Deutsch", "Français", "Español")
 FILTERS = ("rct", "meta", "guideline", "free_fulltext", "humans")
 POWER_MODES = ("medium", "high")
@@ -28,6 +32,9 @@ class SignupIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     role: Literal["physician", "student"]
     kvkk_consent: bool
+    # Arayüz dili kayıt ekranında seçilir; uygulama İngilizce açıldığı için alan
+    # verilmezse varsayılanda kalır (eski istemciler de kırılmaz).
+    ui_language: Literal[UI_LANGUAGES] = DEFAULT_UI_LANGUAGE   # type: ignore[valid-type]
     # Görünmez bot tuzağı alanı (bkz. auth.html); insan kullanıcıda her zaman boştur.
     website: str = Field(default="", max_length=200)
 
@@ -143,6 +150,11 @@ class LibraryIn(BaseModel):
 
 class ExportIn(BaseModel):
     report_id: int | None = Field(default=None, ge=1)
+
+
+class UiLanguageIn(BaseModel):
+    """Hesabın arayüz dili. Cevap dilini değiştirmez (o, aramanın kendi ayarı)."""
+    ui_language: Literal[UI_LANGUAGES] = DEFAULT_UI_LANGUAGE   # type: ignore[valid-type]
 
 
 class GrantIn(BaseModel):

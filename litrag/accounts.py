@@ -9,8 +9,9 @@ import threading
 from datetime import datetime, timedelta
 
 from . import abuse, cache, db, meter, modes, security, store
-from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, FREE_ACCOUNTS_PER_SOURCE,
-                     FREE_SOURCE_WINDOW_DAYS, JWT_SECRET, LOVE_EMAIL, PLANS)
+from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, DEFAULT_UI_LANGUAGE,
+                     FREE_ACCOUNTS_PER_SOURCE, FREE_SOURCE_WINDOW_DAYS, JWT_SECRET,
+                     LOVE_EMAIL, PLANS, UI_LANGUAGES)
 from .logging_setup import mask_email
 from .store import conn, migrate_library
 
@@ -115,6 +116,15 @@ def init() -> None:
         # 0 ise free planın aylık kredisi bu hesaba verilmez (bkz. create_user).
         if "free_eligible" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN free_eligible INTEGER NOT NULL DEFAULT 1")
+        # Arayüz dili. Cevap dilinden ayrıdır ve hesapta durur: tarayıcıda tutulsaydı
+        # kullanıcı başka bir cihazdan girdiğinde seçimi kaybolurdu. Mevcut hesaplar
+        # varsayılanla (İngilizce) devam eder, kimsenin arayüzü kendiliğinden değişmez.
+        if "ui_language" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN ui_language TEXT NOT NULL DEFAULT 'en'")
+        # Arayüz dili ile cevap dilinin ayrı şeyler olduğunu anlatan uyarı gösterildi mi?
+        # Doğrulamadan sonraki ilk girişte bir kez gösterilir (bkz. language_notice_pending).
+        if "language_notice_at" not in user_columns:
+            c.execute("ALTER TABLE users ADD COLUMN language_notice_at TEXT")
         # Kullanıcıdan istenen NCBI anahtarı hiçbir aramada kullanılmıyordu (sunucu kendi
         # anahtarını kullanır). Saklanmış anahtarlar ve onları şifreleyen anahtar silinir:
         # işe yaramayan bir sırrı tutmak yalnızca sızma riski taşır.
@@ -220,7 +230,8 @@ def _purge_abuse_records() -> None:
 
 
 def create_user(email: str, password: str, role: str, plan: str = "free",
-                consented: bool = False, sources: tuple[str, ...] = ()) -> dict:
+                consented: bool = False, sources: tuple[str, ...] = (),
+                ui_language: str = DEFAULT_UI_LANGUAGE) -> dict:
     """Hesabı açar.
 
     `sources` kaydın geldiği ağ ve tarayıcıdır (ör. "ip:1.2.3.4", "device:..."). Bu
@@ -254,10 +265,11 @@ def create_user(email: str, password: str, role: str, plan: str = "free",
         try:
             cur = c.execute(
                 "INSERT INTO users (email, email_canonical, password_hash, role, plan,"
-                " credits_used, period_start, free_eligible, kvkk_consent_at, created_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " credits_used, period_start, free_eligible, ui_language, kvkk_consent_at,"
+                " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (email, canonical, security.hash_password(password), role, plan, used,
-                 period, int(eligible), _now() if consented else None, _now()),
+                 period, int(eligible), normalise_ui_language(ui_language),
+                 _now() if consented else None, _now()),
             )
         except Exception as exc:
             if not db.is_integrity_error(exc):
@@ -752,6 +764,47 @@ def mark_email_verified(user_id: int) -> None:
         conn().commit()
 
 
+# --------------------------------------------------------------------- arayüz dili
+def normalise_ui_language(value: str | None) -> str:
+    """Tanınmayan bir kodu varsayılana indirir.
+
+    Dil kodu istemciden gelir ve çevirisi olmayan bir koda düşmek arayüzü yarı boş
+    bırakırdı; eski bir istemciden ya da elle düzenlenmiş bir istekten gelen değer de
+    burada elenir."""
+    code = (value or "").strip().lower()
+    return code if code in UI_LANGUAGES else DEFAULT_UI_LANGUAGE
+
+
+def set_ui_language(user_id: int, value: str) -> str:
+    """Arayüz dilini hesaba yazar ve yazılan (normalleştirilmiş) kodu döndürür."""
+    code = normalise_ui_language(value)
+    with _lock:
+        conn().execute("UPDATE users SET ui_language = ? WHERE id = ?", (code, user_id))
+        conn().commit()
+    return code
+
+
+def language_notice_pending(user: dict) -> bool:
+    """Arayüz dili ile cevap dilinin ayrı şeyler olduğunu anlatan uyarı bekliyor mu?
+
+    Kullanıcı kayıt ekranında arayüzünü Türkçeye çevirdiğinde cevapların da Türkçe
+    geleceğini varsayıyor; oysa cevap dili aramanın kendi ayarı (Gelişmiş panelinde).
+    Uyarı bu boşluğu kapatır ve yalnızca e-postasını doğrulamış, arayüzü varsayılandan
+    başka bir dile almış ve uyarıyı henüz görmemiş hesaba, bir kez gösterilir.
+    Varsayılanı seçende değişen bir şey yok, ona hiç gösterilmez.
+    """
+    return (bool(user.get("email_verified_at"))
+            and not user.get("language_notice_at")
+            and normalise_ui_language(user.get("ui_language")) != DEFAULT_UI_LANGUAGE)
+
+
+def mark_language_notice_seen(user_id: int) -> None:
+    with _lock:
+        conn().execute("UPDATE users SET language_notice_at = ? WHERE id = ?",
+                       (_now(), user_id))
+        conn().commit()
+
+
 # --------------------------------------------------------------------- API görünümü
 def public(user: dict) -> dict:
     """Arayüze gönderilebilecek alanlar. Parola özeti ve şifreli anahtar dışarı çıkmaz."""
@@ -780,6 +833,9 @@ def public(user: dict) -> dict:
                        for name, p in modes.PROFILES.items()},
         "email_verified": bool(user.get("email_verified_at")),
         "must_change_password": bool(user.get("must_change_password")),
+        "ui_language": normalise_ui_language(user.get("ui_language")),
+        # Arayüz bunu görünce uyarıyı gösterir ve gördüğünü sunucuya bildirir.
+        "language_notice_pending": language_notice_pending(user),
         "period_start": user["period_start"],
         "created_at": user["created_at"],
     }

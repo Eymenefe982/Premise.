@@ -42,7 +42,7 @@ from litrag.pipeline import SearchCancelled, SearchRequest, run_search
 from litrag.schemas import (AccountDeleteIn, ExportIn, ForgotPasswordIn, GrantIn, LibraryIn,
                             LoginIn,
                             PasswordChangeIn, SearchIn,
-                            SignupIn, VerifyEmailIn)
+                            SignupIn, UiLanguageIn, VerifyEmailIn)
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
@@ -298,7 +298,8 @@ async def signup(body: SignupIn, request: Request, response: Response) -> dict:
     sources = (f"ip:{abuse.network_of(ip)}", f"device:{_device_id(request, response)}")
     try:
         user = accounts.create_user(str(body.email), body.password, body.role,
-                                    consented=body.kvkk_consent, sources=sources)
+                                    consented=body.kvkk_consent, sources=sources,
+                                    ui_language=body.ui_language)
     except ValueError as exc:
         audit("signup", email=str(body.email), ip=ip, ok=False, reason="rejected")
         raise HTTPException(409, str(exc))
@@ -463,6 +464,20 @@ async def resend_verification(request: Request, user: dict = Depends(current_use
     if not security.reset_throttle.allow(_client_key(request)):
         raise HTTPException(429, "Too many requests. Please wait a moment.")
     _send_verification(user)
+    return {"ok": True}
+
+
+@app.post("/api/me/language")
+async def set_ui_language(body: UiLanguageIn, user: dict = Depends(current_user)) -> dict:
+    """Arayüz dilini değiştirir. Cevap dili bundan ayrıdır ve her aramada seçilir."""
+    code = accounts.set_ui_language(user["id"], body.ui_language)
+    return {"ok": True, "ui_language": code}
+
+
+@app.post("/api/me/language-notice-seen")
+async def dismiss_language_notice(user: dict = Depends(current_user)) -> dict:
+    """Arayüz/cevap dili uyarısının gösterildiğini işaretler; bir daha çıkmaz."""
+    accounts.mark_language_notice_seen(user["id"])
     return {"ok": True}
 
 

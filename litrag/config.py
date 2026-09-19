@@ -210,3 +210,13 @@ INSTITUTIONAL_EMAIL_SUFFIXES = tuple(
 
 # Kayıt sırasında seçilebilecek roller. Genel halk 2. faza kadar kapalı (bkz. plan, madde 3).
 SIGNUP_ROLES = ("physician", "student")
+
+# --- Arayüz dili ---
+# Arayüzün çevrildiği diller. Cevap dilinden (schemas.LANGUAGES, 5 dil) BİLEREK ayrıdır:
+# cevabı model herhangi bir dilde yazabilir, ama arayüz metinlerini birinin yazıp gözden
+# geçirmesi gerekir. Seçiciye yalnız gerçekten çevrilmiş diller konur; yarım çevrilmiş bir
+# arayüz, İngilizce bir arayüzden kötüdür.
+# Yeni dil eklemek: buraya kodu, web/i18n.js'e sözlüğü.
+UI_LANGUAGES = ("en", "tr")
+# Uygulama İngilizce açılır; kullanıcı dilini kayıt ekranında seçer (bkz. web/auth.html).
+DEFAULT_UI_LANGUAGE = "en"
