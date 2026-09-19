@@ -39,15 +39,22 @@ def test_unknown_mode_falls_back_to_default():
 
 
 def test_modes_get_progressively_more_expensive():
-    low, medium, high = (modes.profile(m) for m in ("low", "medium", "high"))
-    assert low.estimate_try < medium.estimate_try < high.estimate_try
-    assert low.ceiling_try < medium.ceiling_try < high.ceiling_try
-    assert low.max_articles < medium.max_articles < high.max_articles
+    medium, high = (modes.profile(m) for m in ("medium", "high"))
+    assert medium.estimate_try < high.estimate_try
+    assert medium.ceiling_try < high.ceiling_try
+    assert medium.max_articles < high.max_articles
+
+
+def test_removed_low_mode_falls_back_to_medium():
+    """Kaldırılan "low" mod: tarayıcıda eski seçimi kayıtlı olan istemci hata almamalı."""
+    from litrag.schemas import SearchIn
+    assert "low" not in modes.PROFILES
+    assert modes.profile("low").name == "medium"
+    assert SearchIn(query="aynı soru", power_mode="low").power_mode == "medium"
 
 
 def test_mode_budgets_match_their_promise():
-    """Kullanıcıya verilen söz: 0.50 / 1.00 / 5.00 TL üst sınırları."""
-    assert modes.profile("low").ceiling_try <= 0.50
+    """Kullanıcıya verilen söz: 1.00 / 5.00 TL üst sınırları."""
     assert modes.profile("medium").ceiling_try <= 1.00
     assert modes.profile("high").ceiling_try <= 5.00
 
@@ -55,8 +62,8 @@ def test_mode_budgets_match_their_promise():
 def test_only_high_mode_uses_the_expensive_model():
     """Ucuz modlar zamlanan modele hiç dokunmamalı, yoksa 2027'de bütçeyi aşarlar."""
     from litrag.config import GEMINI_HIGH_MODEL
-    for name in ("low", "medium"):
-        assert all(s.model != GEMINI_HIGH_MODEL for s in modes.profile(name).stages.values())
+    assert all(s.model != GEMINI_HIGH_MODEL
+               for s in modes.profile("medium").stages.values())
     assert modes.profile("high").stage("synthesis").model == GEMINI_HIGH_MODEL
 
 
@@ -97,12 +104,12 @@ def test_concurrent_searches_keep_their_own_mode():
             with ThreadPoolExecutor(max_workers=1) as pool:
                 results[mode] = modes.submit(pool, lambda: modes.active().name).result()
 
-    threads = [threading.Thread(target=run, args=(m,)) for m in ("low", "high")]
+    threads = [threading.Thread(target=run, args=(m,)) for m in ("medium", "high")]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=5)
-    assert results == {"low": "low", "high": "high"}
+    assert results == {"medium": "medium", "high": "high"}
 
 
 def test_context_outside_a_search_is_the_default():
@@ -203,11 +210,6 @@ def test_user_settings_cannot_raise_the_cost_of_a_mode():
         assert accounts.max_cost_of(frugal) == accounts.max_cost_of(maxed)
 
 
-def test_low_mode_ignores_the_full_text_request():
-    """Düşük güçte tam metin hiç okunmaz; anahtar açık bırakılsa bile."""
-    assert modes.profile("low").fulltext_top_n == 0
-
-
 def test_every_mode_keeps_the_answer_guardrails():
     """Ucuzluk, denetimi kapatmanın gerekçesi değil: hangi mod seçilirse seçilsin
     makaleler alakaya göre elenir ve iddialar kaynağına karşı sınanır."""
@@ -218,10 +220,10 @@ def test_every_mode_keeps_the_answer_guardrails():
         assert prof.triage_candidates >= prof.max_articles
 
 
-def test_high_mode_reserves_more_than_low():
-    low = accounts.max_cost_of(SearchRequest(query="q", power_mode="low"))
+def test_high_mode_reserves_more_than_medium():
+    medium = accounts.max_cost_of(SearchRequest(query="q", power_mode="medium"))
     high = accounts.max_cost_of(SearchRequest(query="q", power_mode="high"))
-    assert high > low
+    assert high > medium
 
 
 def test_request_without_a_mode_still_prices(monkeypatch):
@@ -246,9 +248,9 @@ def test_one_high_power_search_fits_in_an_account_budget():
 # ---------------------------------------------------------------- önbellek
 def test_cache_key_separates_power_modes():
     base = dict(query="aynı soru", author="", journal="")
-    low = cache.make_key(SearchRequest(**base, power_mode="low"))
+    medium = cache.make_key(SearchRequest(**base, power_mode="medium"))
     high = cache.make_key(SearchRequest(**base, power_mode="high"))
-    assert low != high
+    assert medium != high
 
 
 def test_cache_key_is_stable_for_the_same_mode():

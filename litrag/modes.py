@@ -1,12 +1,16 @@
 """Güç modları: bir aramanın hangi modelleri ve hangi hacmi kullanacağı.
 
-Kullanıcı arama başına low / medium / high seçer. Profil, hattın her aşaması için
+Kullanıcı arama başına medium / high seçer. Profil, hattın her aşaması için
 modeli ve çıktı sınırını, ayrıca kaç makale okunacağını belirler. Amaç kalite ile
 arama başına gerçek para arasında kullanıcının kendi seçtiği bir denge kurmaktır.
 
-Profiller 1 Ocak 2027'deki Gemini zammına dayanıklı kuruldu: low ve medium sentez
-dahil tamamen lite modellerde koştuğu için maliyetleri sabit kalır, yalnızca high
-zamlanan modeli kullanır ve o da 5 TL tavanının altında kalacak şekilde ölçüldü.
+Profiller 1 Ocak 2027'deki Gemini zammına dayanıklı kuruldu: medium zamlanan
+modele hiç dokunmadığı için maliyeti sabit kalır, yalnızca high onu kullanır ve o
+da 5 TL tavanının altında kalacak şekilde ölçüldü.
+
+Eskiden bir "low" mod da vardı (yalnızca özetler, sayı çıkarımı yok). Klinik soruda
+sayısız bir cevap ürünün kalitesini temsil etmediği için 2026-09-19'da kaldırıldı;
+eski istemcilerden gelen "low" sessizce medium'a düşer (bkz. `profile`).
 """
 from __future__ import annotations
 
@@ -18,7 +22,7 @@ from typing import Iterator
 from .config import GEMINI_HIGH_MODEL, GEMINI_LITE_MODEL, GEMINI_MID_MODEL
 
 STAGES = ("translate", "triage", "extract", "synthesis", "claims")
-POWER_MODES = ("low", "medium", "high")
+POWER_MODES = ("medium", "high")
 DEFAULT_MODE = "medium"
 
 
@@ -79,28 +83,6 @@ class Profile:
 
 
 PROFILES: dict[str, Profile] = {
-    "low": Profile(
-        name="low",
-        label="Low power",
-        summary="A short answer from abstracts, with the same checks as every other mode.",
-        use_case="Use it to see what the literature holds before committing time: "
-                 "is this question worth pursuing, and which papers are the entry points.",
-        ceiling_try=0.50, estimate_try=0.24,      # ölçüldü: 0,222 ve 0,239 TL
-        stages={
-            "translate": Stage(GEMINI_LITE_MODEL, 300),
-            "triage":    Stage(GEMINI_LITE_MODEL, 600),
-            "extract":   Stage(GEMINI_LITE_MODEL, 1500),
-            "synthesis": Stage(GEMINI_MID_MODEL, 1600),
-            "claims":    Stage(GEMINI_LITE_MODEL, 600),
-        },
-        max_articles=8, triage_candidates=24,
-        fulltext_top_n=0, fulltext_chars=0, abstract_chars=900,
-        extract=False, extract_excerpt_chars=0,
-        # Ucuz mod "denetimsiz mod" değildir: hızlı cevap az makaleye dayanabilir
-        # ama yanlış kaynağa dayanamaz. Bu katman özet üzerinden çalıştığında bile
-        # arama başına ~2 kuruş tutuyor.
-        claim_check=True, max_claims=4, claim_excerpt_chars=0,
-    ),
     "medium": Profile(
         name="medium",
         label="Medium power",

@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 LANGUAGES = ("English", "Türkçe", "Deutsch", "Français", "Español")
 FILTERS = ("rct", "meta", "guideline", "free_fulltext", "humans")
-POWER_MODES = ("low", "medium", "high")
+POWER_MODES = ("medium", "high")
 
 
 def _clean_email(v: object) -> str:
@@ -92,6 +92,13 @@ class SearchIn(BaseModel):
     synthesize: bool = True
     refresh: bool = False
     power_mode: Literal[POWER_MODES] = "medium"   # type: ignore[valid-type]
+
+    @field_validator("power_mode", mode="before")
+    @classmethod
+    def legacy_low_mode(cls, v: object) -> object:
+        # "low" kaldırıldı; tarayıcısında eski seçim kayıtlı kalan kullanıcı hata
+        # görmesin, varsayılan moda düşsün.
+        return "medium" if v == "low" else v
 
     @field_validator("query", "author", "journal")
     @classmethod

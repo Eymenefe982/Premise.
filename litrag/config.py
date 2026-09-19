@@ -168,7 +168,7 @@ CREDIT_TRY = float(os.getenv("CREDIT_TRY", "0.0333"))
 # burada kredi sayısı ve fiyatla ayrışacak; anahtarlar o gün için duruyor.
 ACCOUNT_CREDITS = int(os.getenv("ACCOUNT_CREDITS", "150"))
 _SHARED_PLAN = {"credits": ACCOUNT_CREDITS, "fulltext": True, "price_try": 0,
-                "modes": ("low", "medium", "high")}
+                "modes": ("medium", "high")}
 
 PLANS = {
     "free":    {"label": "Free", **_SHARED_PLAN},

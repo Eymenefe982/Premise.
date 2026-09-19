@@ -1069,7 +1069,7 @@ async function loadAccount() {
 
   // Güç modları: plana kapalı olanlar seçilemez, açık olanlar kredi tahminini gösterir.
   state.modeCosts = me.mode_costs || {};
-  const allowed = me.modes || ["low", "medium", "high"];
+  const allowed = me.modes || ["medium", "high"];
   $$("#power-modes .power").forEach((btn) => {
     const open = allowed.includes(btn.dataset.mode);
     btn.disabled = !open;
