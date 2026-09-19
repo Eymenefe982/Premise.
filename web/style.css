@@ -334,6 +334,8 @@ html[data-theme="dark"] .btn-primary { color: #04201d; }
 .badge-ev { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .badge-oa { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
 .badge-ft { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+/* Raporun başına eklenen uyarılar tek blokta durur (bkz. app.js renderResult). */
+.report-warnings { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .9rem; }
 .card-actions { display: flex; gap: 12px; margin-top: 12px; font-size: 13px; align-items: center; }
 .link-btn {
   border: 0; background: none; padding: 0;

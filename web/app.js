@@ -761,19 +761,29 @@ function render(result) {
   renderTables(result);
   renderAgreement(result);
 
-  if (result.unverified_pmids && result.unverified_pmids.length) {
-    $("#report").insertAdjacentHTML("afterbegin",
-      `<p class="badge badge-ft">Warning: ${result.unverified_pmids.length} citation(s) were not
-       found in the result set and have been flagged in the text.</p>`);
-  }
+  /* Uyarılar tek seferde, önem sırasıyla eklenir. Ayrı ayrı "afterbegin" ile
+     eklendiklerinde her yeni uyarı öncekinin ÜSTÜNE giriyordu: sıra istenmeden
+     tersine dönüyor ve ince kanıtlı sorularda cevabın başı uyarı yığınına
+     dönüşüyordu. */
+  const warnings = [];
 
   // Kaynaksız bir Kısa Cevap, doğrulanmış bir Kısa Cevapla aynı görünür; aradaki
-  // farkı yalnızca bu uyarı gösterir.
+  // farkı yalnızca bu uyarı gösterir. En ağır uyarı olduğu için başta.
   if (result.short_answer_uncited && result.report) {
+    warnings.push(`The short answer carries no citation that could be traced to an
+      article below, so the claim check could not verify it. Read the studies before
+      relying on it.`);
+  }
+  if (result.unverified_pmids && result.unverified_pmids.length) {
+    warnings.push(`${result.unverified_pmids.length} citation(s) were not found in the
+      result set and have been flagged in the text.`);
+  }
+
+  if (warnings.length) {
     $("#report").insertAdjacentHTML("afterbegin",
-      `<p class="badge badge-ft">Warning: the short answer carries no citation that
-       could be traced to an article below, so the claim check could not verify it.
-       Read the studies before relying on it.</p>`);
+      `<div class="report-warnings">` +
+      warnings.map((w) => `<p class="badge badge-ft">Warning: ${w}</p>`).join("") +
+      `</div>`);
   }
 
   $$("#report .src-btn").forEach((btn) =>

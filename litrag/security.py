@@ -68,17 +68,6 @@ def read_claims(secret: str, token: str, kind: str = "access") -> dict | None:
     return data if data.get("typ") == kind else None
 
 
-def read_token(secret: str, token: str, kind: str = "access") -> tuple[int, int] | None:
-    """Geçerliyse (kullanıcı kimliği, oturum kuşağı), değilse None döndürür."""
-    data = read_claims(secret, token, kind)
-    if data is None:
-        return None
-    try:
-        return int(data["sub"]), int(data.get("gen", 0))
-    except (KeyError, TypeError, ValueError):
-        return None
-
-
 # ------------------------------------------------------- tek kullanımlık jetonlar
 def new_secret_token() -> str:
     """Şifre sıfırlama / e-posta doğrulama bağlantısındaki rastgele değer."""

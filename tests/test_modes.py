@@ -75,6 +75,35 @@ def test_high_synthesis_does_not_inherit_the_legacy_model():
         assert MODEL_PRICES[GEMINI_HIGH_MODEL][1] <= MODEL_PRICES[GEMINI_MODEL][1]
 
 
+def test_verification_stages_are_not_left_on_the_cheapest_model():
+    """Çeviri, triyaj ve iddia kontrolü sentezi DENETLEYEN adımlardır.
+
+    Hepsi en ucuz modelde koştuğunda hattın doğruluk güvencesi, denetlediği cevaptan
+    zayıf bir modele bağlı kalıyor: asıl klinik risk olan "gerçek makaleye yanlış
+    atıf"ı en zayıf halka yakalamak durumunda. Bu test o gerilemeyi kilitler; bilinçli
+    olarak geri dönülecekse GEMINI_GUARD_MODEL lite modele eşitlenir ve bu test
+    o niyeti görünür kılar.
+    """
+    from litrag.config import GEMINI_GUARD_MODEL, GEMINI_LITE_MODEL, MODEL_PRICES
+    if GEMINI_GUARD_MODEL == GEMINI_LITE_MODEL:
+        pytest.skip("guard model bilerek lite'a eşitlenmiş")
+    for name in modes.POWER_MODES:
+        prof = modes.profile(name)
+        for stage in ("translate", "triage", "claims"):
+            assert prof.stage(stage).model == GEMINI_GUARD_MODEL, f"{name}/{stage}"
+        # Bekçi, denetlediği sentezden pahalı olmamalı: kalite freni orada değil.
+        assert (MODEL_PRICES[GEMINI_GUARD_MODEL][1]
+                <= MODEL_PRICES[prof.stage("synthesis").model][1])
+
+
+def test_numeric_extraction_stays_on_the_cheap_model():
+    """Token hacmi en yüksek adım budur ve ürettiği her sayı kaynak metne karşı
+    ayrıca sınanır; bekçi yükseltmesi buraya taşınırsa maliyet sözü bozulur."""
+    from litrag.config import GEMINI_LITE_MODEL
+    for name in modes.POWER_MODES:
+        assert modes.profile(name).stage("extract").model == GEMINI_LITE_MODEL
+
+
 def test_every_stage_model_has_a_known_price():
     """Fiyatı bilinmeyen model, ölçümü sessizce yanlışlar."""
     from litrag.config import MODEL_PRICES

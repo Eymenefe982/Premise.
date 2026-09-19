@@ -31,7 +31,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from litrag import abuse, accounts, cache, exporters, mailer, security, store
 from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, ANALYTICS_SITE,
-                           ANALYTICS_SRC, APP_NAME, APP_URL,
+                           ANALYTICS_SRC, APP_NAME, APP_URL, BEHIND_CLOUDFLARE,
                            COOKIE_SECURE, DATABASE_URL, DB_IS_EPHEMERAL, DB_PATH, FORCE_HTTPS,
                            GEMINI_API_KEYS, GEMINI_FAST_MODEL, GEMINI_MODEL, NCBI_API_KEY,
                            NCBI_EMAIL, PLANS, REFRESH_TOKEN_DAYS, REQUIRE_EMAIL_VERIFICATION,
@@ -60,6 +60,16 @@ async def _lifespan(app: FastAPI):
                   "cache are wiped on restart. Set DATABASE_URL.", DB_PATH)
     if os.getenv("RENDER") and not COOKIE_SECURE:
         log.error("COOKIE_SECURE is off in production: session cookies travel over HTTP.")
+    # Arama işleri (`_jobs`) ve hız sınırı sayaçları süreç belleğindedir. Birden fazla
+    # worker açıldığında akış ve iptal uçları isteği başka bir sürece düşerse işi
+    # bulamaz (kullanıcı sonucu hiç göremez), hız sınırları da worker sayısıyla
+    # çarpılarak gevşer. Kredi muhasebesi `credit_holds` sayesinde ayakta kalır.
+    # Bu sessizce bozulan bir kurulumdur; görünür olması gerekir.
+    workers = os.getenv("WEB_CONCURRENCY", "").strip()
+    if workers.isdigit() and int(workers) > 1:
+        log.error("WEB_CONCURRENCY=%s: search streaming, cancellation and rate limits "
+                  "assume a single process. Run one worker, or move the job registry "
+                  "and throttles to shared storage first.", workers)
     removed = cache.purge_expired()
     if removed:
         log.info("%d expired cache entries removed", removed)
@@ -247,16 +257,22 @@ def _client_key(request: Request) -> str:
     """İstemcinin IP'si. Vekil arkasında vekilin kendi adresi herkes için aynıdır;
     o yüzden vekilin koyduğu başlıklar okunur (bkz. config.TRUST_PROXY_HEADERS).
 
-    Önce Cloudflare'in kenarda yazdığı başlıklar okunur: istemcinin gönderdiği değeri
-    ezerler. X-Forwarded-For'un ise İLK elemanı istemcinin kendi yazdığı değerdir
-    (Render başlığı temizlemez, yalnızca sonuna ekler); oradan okumak IP başına bütün
-    hız sınırlarını sahte bir başlıkla aşılabilir kılıyordu. Güvenilir olan, en yakın
-    vekilin eklediği SON elemandır."""
+    X-Forwarded-For'un İLK elemanı istemcinin kendi yazdığı değerdir (Render başlığı
+    temizlemez, yalnızca sonuna ekler); oradan okumak IP başına bütün hız sınırlarını
+    sahte bir başlıkla aşılabilir kılıyordu. Güvenilir olan, en yakın vekilin eklediği
+    SON elemandır.
+
+    `cf-connecting-ip` / `true-client-ip` yalnızca BEHIND_CLOUDFLARE açıkken okunur.
+    Bu başlıkları yazan tek güvenilir taraf Cloudflare'dir; önünde Cloudflare olmayan
+    bir kurulumda onları koşulsuz okumak, istemciye kendi IP'sini seçme hakkı veriyordu:
+    şifre sıfırlama ve kayıt hız sınırları (IP anahtarlı) başlığı döndürerek tamamen
+    aşılabiliyor, ücretsiz kredinin ağ kotası da aynı yolla eriyordu."""
     if TRUST_PROXY_HEADERS:
-        for name in ("cf-connecting-ip", "true-client-ip"):
-            value = request.headers.get(name, "").strip()
-            if value:
-                return value
+        if BEHIND_CLOUDFLARE:
+            for name in ("cf-connecting-ip", "true-client-ip"):
+                value = request.headers.get(name, "").strip()
+                if value:
+                    return value
         forwarded = [part.strip() for part in
                      request.headers.get("x-forwarded-for", "").split(",") if part.strip()]
         if forwarded:
@@ -634,7 +650,7 @@ async def library(user: dict = Depends(current_user)) -> list[dict]:
 
 @app.post("/api/library")
 async def library_add(body: LibraryIn, user: dict = Depends(current_user)) -> dict:
-    added = store.add_to_library(body.article, body.tag, user_id=user["id"])
+    added = store.add_to_library(body.article, body.tag, body.note, user_id=user["id"])
     return {"ok": True, "added": added}
 
 

@@ -38,9 +38,15 @@ def fresh(outbox):
 
 
 def _signup(email, client=None, ip=None):
-    """Her çağrı varsayılan olarak ayrı bir tarayıcıdır (ayrı çerez kavanozu)."""
+    """Her çağrı varsayılan olarak ayrı bir tarayıcıdır (ayrı çerez kavanozu).
+
+    İstemci IP'si `x-forwarded-for` ile verilir: canlıda güvenilen yol budur, çünkü
+    ters vekil (Render) istemcinin gönderdiğini temizlemez, kendi gördüğü adresi
+    listenin SONUNA ekler ve `_client_key` o son elemanı okur. Cloudflare başlıkları
+    yalnız BEHIND_CLOUDFLARE açıkken okunur (bkz. test_fixes).
+    """
     client = client or TestClient(appmod.app)
-    headers = {"cf-connecting-ip": ip} if ip else {}
+    headers = {"x-forwarded-for": ip} if ip else {}
     return client.post("/api/auth/signup", headers=headers,
                        json={"email": email, "password": PASSWORD,
                              "role": "physician", "kvkk_consent": True})
@@ -165,7 +171,7 @@ def test_only_the_first_accounts_from_one_network_get_free_credits(fresh, monkey
     me = _signup("ag-fazla@example.com", client, ip="203.0.113.7").json()
     assert me["credits_left"] == 0 and me["free_limited"] is True
     res = client.post("/api/search", json={"query": "sglt2 heart failure"},
-                      headers={"cf-connecting-ip": "203.0.113.7"})
+                      headers={"x-forwarded-for": "203.0.113.7"})
     assert res.status_code == 402 and "institutional" in res.json()["detail"]
 
     # Başka bir ağ etkilenmez

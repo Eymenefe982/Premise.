@@ -24,6 +24,13 @@ GEMINI_FAST_MODEL = os.getenv("GEMINI_FAST_MODEL", GEMINI_MODEL).strip()
 GEMINI_HIGH_MODEL = os.getenv("GEMINI_HIGH_MODEL", "gemini-3.6-flash").strip()
 GEMINI_MID_MODEL = os.getenv("GEMINI_MID_MODEL", "gemini-3.5-flash-lite").strip()
 GEMINI_LITE_MODEL = os.getenv("GEMINI_LITE_MODEL", "gemini-3.1-flash-lite").strip()
+# Doğrulama ("bekçi") aşamalarının modeli: çeviri, alaka triyajı ve iddia kontrolü.
+# Bu üç adım sentezi denetler; en ucuz modelde koştuklarında hattın güvencesi, denetlediği
+# cevaptan zayıf bir modele bağlı kalıyordu. Ayrı bir anahtar, kaliteyi maliyetten bağımsız
+# ayarlamayı mümkün kılar: geri dönmek için GEMINI_GUARD_MODEL'i lite modele eşitlemek yeter.
+# Sayısal çıkarım (extract) bilerek dışarıda: token hacmi en yüksek adım odur ve ürettiği
+# her sayı zaten kaynak metne karşı sınanır.
+GEMINI_GUARD_MODEL = os.getenv("GEMINI_GUARD_MODEL", GEMINI_MID_MODEL).strip()
 # Tek bir model çağrısının en uzun süresi. Yüksek modun sentezi (10.000 token'a kadar)
 # bunun rahatça altında kalır; aşan çağrı hata sayılır, arama ücretlendirilmez.
 GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "180"))
@@ -122,6 +129,15 @@ LOVE_EMAIL = os.getenv("LOVE_EMAIL", "").strip().lower()
 # Açıkken istemci IP'si vekilin eklediği başlıklardan okunur (Render'da otomatik açık).
 TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "1" if os.getenv("RENDER") else "0"
                                 ).strip() not in ("0", "false", "False")
+
+# Yalnızca gerçekten Cloudflare'in arkasındayken açılır. `cf-connecting-ip` ve
+# `true-client-ip` başlıklarını yazan tek güvenilir taraf Cloudflare'dir; önünde
+# Cloudflare olmayan bir kurulumda (ör. doğrudan *.onrender.com) bu başlıkları
+# istemcinin kendisi uydurabilir. Kapalıyken istemci IP'si yalnız vekilin eklediği
+# X-Forwarded-For son elemanından okunur; orası sahtelenemez (bkz. app._client_key).
+# Varsayılan kapalı: "unutulduğunda güvensiz" olan taraf açık olan taraftır.
+BEHIND_CLOUDFLARE = os.getenv("BEHIND_CLOUDFLARE", "0").strip() \
+    not in ("0", "false", "False")
 
 # Tarayıcıdan gelen isteklerde izin verilen kaynaklar (virgülle ayrılır)
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]

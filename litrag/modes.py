@@ -11,6 +11,12 @@ da 5 TL tavanının altında kalacak şekilde ölçüldü.
 Eskiden bir "low" mod da vardı (yalnızca özetler, sayı çıkarımı yok). Klinik soruda
 sayısız bir cevap ürünün kalitesini temsil etmediği için 2026-09-19'da kaldırıldı;
 eski istemcilerden gelen "low" sessizce medium'a düşer (bkz. `profile`).
+
+Çeviri, triyaj ve iddia kontrolü GEMINI_GUARD_MODEL'de koşar (bkz. config). Bu üç adım
+sentezi denetler: hepsi en ucuz modeldeyken hattın doğruluk güvencesi, denetlediği
+cevaptan zayıf bir modele bağlıydı ve asıl klinik risk olan "gerçek makaleye yanlış
+atıf"ı en zayıf halka yakalamak durumundaydı. Sayısal çıkarım dışarıda bırakıldı:
+token hacmi en yüksek adım odur ve ürettiği her sayı kaynak metne karşı ayrıca sınanır.
 """
 from __future__ import annotations
 
@@ -19,7 +25,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator
 
-from .config import GEMINI_HIGH_MODEL, GEMINI_LITE_MODEL, GEMINI_MID_MODEL
+from .config import (GEMINI_GUARD_MODEL, GEMINI_HIGH_MODEL, GEMINI_LITE_MODEL,
+                     GEMINI_MID_MODEL)
 
 STAGES = ("translate", "triage", "extract", "synthesis", "claims")
 POWER_MODES = ("medium", "high")
@@ -89,13 +96,18 @@ PROFILES: dict[str, Profile] = {
         summary="Balanced depth: full-text reading and verified numbers.",
         use_case="The everyday setting for a clinical question — enough depth to "
                  "quote a number, without paying for a full review.",
-        ceiling_try=1.00, estimate_try=0.70,      # ölçüldü: 0,595 ve 0,747 TL
+        # Bekçi adımları lite'tan guard modeline çıkınca fiyat tablosundan hesaplanan
+        # tipik maliyet ~0,70'ten ~0,80 TL'ye çıkar; tavan 1,00 TL'nin altında kalır ve
+        # rezervasyon tavana bağlı olduğu için değişmez. Ölçülmüş bir değer değil,
+        # MODEL_PRICES üzerinden tahmindir: canlıda bir arama sonrası usage.cost_try ile
+        # doğrulanıp bu sayı güncellenmeli.
+        ceiling_try=1.00, estimate_try=0.80,
         stages={
-            "translate": Stage(GEMINI_LITE_MODEL, 300),
-            "triage":    Stage(GEMINI_LITE_MODEL, 800),
+            "translate": Stage(GEMINI_GUARD_MODEL, 300),
+            "triage":    Stage(GEMINI_GUARD_MODEL, 800),
             "extract":   Stage(GEMINI_LITE_MODEL, 1500),
             "synthesis": Stage(GEMINI_MID_MODEL, 3000),
-            "claims":    Stage(GEMINI_LITE_MODEL, 600),
+            "claims":    Stage(GEMINI_GUARD_MODEL, 600),
         },
         max_articles=15, triage_candidates=25,
         fulltext_top_n=3, fulltext_chars=8000, abstract_chars=1200,
@@ -108,16 +120,17 @@ PROFILES: dict[str, Profile] = {
         summary="A deep report: the widest net, long full texts and data tables.",
         use_case="For work you will have to defend — a case presentation, a journal "
                  "club, a review draft, or a decision someone will question.",
-        ceiling_try=5.00, estimate_try=2.50,      # ölçüldü: 2,349 TL
+        # ölçülen 2,349 TL + bekçi yükseltmesinin fiyat tablosundan tahmini payı (~0,13).
+        ceiling_try=5.00, estimate_try=2.65,
         stages={
-            "translate": Stage(GEMINI_LITE_MODEL, 400),
-            "triage":    Stage(GEMINI_LITE_MODEL, 1200),
+            "translate": Stage(GEMINI_GUARD_MODEL, 400),
+            "triage":    Stage(GEMINI_GUARD_MODEL, 1200),
             "extract":   Stage(GEMINI_LITE_MODEL, 2500),
             # Bu sınır yalnızca raporu değil, modelin görünmeyen düşünme adımlarını da
             # kapsar: 4.000 denendiğinde düşünme bütçeyi yiyip rapor cümle ortasında
             # kesildi. Sınır rapora değil, düşünme + rapor toplamına göre konur.
             "synthesis": Stage(GEMINI_HIGH_MODEL, 10000),
-            "claims":    Stage(GEMINI_LITE_MODEL, 800),
+            "claims":    Stage(GEMINI_GUARD_MODEL, 800),
         },
         max_articles=20, triage_candidates=40,
         fulltext_top_n=5, fulltext_chars=7000, abstract_chars=1600,

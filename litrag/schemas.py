@@ -120,6 +120,10 @@ class SearchIn(BaseModel):
 class LibraryIn(BaseModel):
     article: dict = Field(default_factory=dict)
     tag: str = Field(default="", max_length=60)
+    # `note` veritabanında ve `store.add_to_library`'de vardı ama hiçbir uçtan
+    # doldurulamıyordu; `tag` ile simetrik hale getirildi. İkisi de şimdilik yalnız
+    # API seviyesinde: arayüzde giriş alanı yok (bkz. web/app.js kütüphane listesi).
+    note: str = Field(default="", max_length=2000)
 
     @field_validator("article")
     @classmethod

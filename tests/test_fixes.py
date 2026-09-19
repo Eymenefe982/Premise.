@@ -281,7 +281,35 @@ def test_client_ip_ignores_a_forged_first_forwarded_entry(monkeypatch):
         return appmod._client_key(Request(scope))
 
     assert key({"x-forwarded-for": "6.6.6.6, 203.0.113.5"}) == "203.0.113.5"
-    assert key({"cf-connecting-ip": "198.51.100.1", "x-forwarded-for": "6.6.6.6"}) == "198.51.100.1"
+
+
+def test_cloudflare_headers_are_ignored_unless_we_are_behind_cloudflare(monkeypatch):
+    """`cf-connecting-ip` yalnız Cloudflare arkasında anlamlıdır.
+
+    Önünde Cloudflare olmayan bir kurulumda (doğrudan *.onrender.com) bu başlığı
+    istemcinin kendisi yazabilir. Koşulsuz okunduğu sürece IP anahtarlı bütün hız
+    sınırları (kayıt, şifre sıfırlama) ve ücretsiz kredinin ağ kotası, başlığı her
+    istekte değiştirerek aşılabiliyordu.
+    """
+    from starlette.requests import Request
+
+    monkeypatch.setattr(appmod, "TRUST_PROXY_HEADERS", True)
+
+    def key(headers):
+        scope = {"type": "http", "headers": [(k.encode(), v.encode()) for k, v in headers.items()],
+                 "client": ("10.0.0.9", 1)}
+        return appmod._client_key(Request(scope))
+
+    forged = {"cf-connecting-ip": "198.51.100.1", "true-client-ip": "198.51.100.2",
+              "x-forwarded-for": "6.6.6.6, 203.0.113.5"}
+
+    # Cloudflare yoksa: uydurulmuş başlıklar yok sayılır, vekilin eklediği son hop kalır.
+    monkeypatch.setattr(appmod, "BEHIND_CLOUDFLARE", False)
+    assert key(forged) == "203.0.113.5"
+
+    # Cloudflare varsa: kenarın yazdığı başlık istemcinin X-Forwarded-For'unu ezer.
+    monkeypatch.setattr(appmod, "BEHIND_CLOUDFLARE", True)
+    assert key(forged) == "198.51.100.1"
 
 
 def test_logout_revokes_this_sessions_refresh_token_only(client):

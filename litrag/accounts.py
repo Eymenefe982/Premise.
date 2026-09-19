@@ -411,7 +411,8 @@ def is_admin(user: dict) -> bool:
 
 def is_love(user: dict) -> bool:
     """Kalp rozetli özel hesap. E-posta doğrulanmadan tanınmaz."""
-    return bool(LOVE_EMAIL) and (user.get("email") or "").lower() == LOVE_EMAIL         and bool(user.get("email_verified_at"))
+    return (bool(LOVE_EMAIL) and (user.get("email") or "").lower() == LOVE_EMAIL
+            and bool(user.get("email_verified_at")))
 
 
 def is_unlimited(user: dict) -> bool:
