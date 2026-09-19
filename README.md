@@ -224,10 +224,6 @@ py cli.py "sepsiste vitamin C" --dil English --disa-aktar docx ris
 seçenekleri de vardır.
 `py cli.py --help` tümünü listeler.
 
-**Eski masaüstü arayüz**
-
-`gui.pyw` dosyası olduğu gibi çalışmaya devam eder; yeni kaynakları kullanmaz.
-
 ## Kurulum
 
 ```bash
