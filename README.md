@@ -142,7 +142,10 @@ Tıbbi sorular birbirini çok tekrar eder. Aynı soru aynı ayarlarla geldiğind
 - Makale sayısı, dil, filtreler ya da tam metin ayarı değişirse anahtar da değişir, çünkü
   sonuç gerçekten farklıdır.
 - Varsayılan geçerlilik süresi 7 gündür (`CACHE_TTL_DAYS`). Süresi dolan satırlar sunucu
-  açılışında temizlenir.
+  açılışında ve her yeni aramanın başında temizlenir.
+- Her satır, onu üreten hesaba bağlıdır (`search_cache.user_id`). Hesap silindiğinde o hesabın
+  sorularından üretilmiş önbellek satırları da silinir; başka bir kullanıcıya dönen sonuç
+  sahibini göstermez.
 - Önbellekten gelen her sonuç arayüzde "reused from a search N hours ago" etiketiyle
   işaretlenir ve yanındaki **run it fresh** düğmesi taramayı baştan çalıştırır. Eski bir
   cevabın yeni sanılması tıbbi bir üründe kabul edilemez, bu yüzden etiket gizlenmez.
@@ -276,6 +279,17 @@ litrag/
     openaccess.py       OpenAlex + Unpaywall
     clinical.py         StatPearls, kılavuzlar, Cochrane, hızlı bağlantılar
 ```
+
+## Hesap ve veri
+
+- Oturum iki çerezle tutulur: 2 saatlik erişim jetonu ve 30 günlük yenileme jetonu. Erişim
+  jetonu dolduğunda sunucu, geçerli yenileme jetonuyla oturumu sessizce uzatır; çıkış yapılmış
+  ya da şifre değişiminden önce verilmiş jeton kabul edilmez.
+- Kullanıcı hesabını hesap sayfasından şifresiyle onaylayarak silebilir (`DELETE /api/me`).
+  Raporlar, kütüphane, kredi defteri, jetonlar, rezervasyonlar ve kullanıcının sorularından
+  üretilmiş önbellek satırları kalıcı olarak silinir. Arama sürerken silme reddedilir; yönetici
+  hesabı uygulamadan silinemez.
+- Sorgu metni hesaba bağlı olmayan hiçbir tabloda süresiz tutulmaz.
 
 ## Sınırlar
 

@@ -21,9 +21,6 @@ log = logging.getLogger("premise.store")
 _lock = threading.RLock()
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS searches (
-    id INTEGER PRIMARY KEY, date TEXT, query TEXT, author TEXT
-);
 CREATE TABLE IF NOT EXISTS reports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at TEXT NOT NULL,
@@ -51,7 +48,8 @@ CREATE TABLE IF NOT EXISTS search_cache (
     language TEXT,
     max_articles INTEGER,
     hits INTEGER NOT NULL DEFAULT 0,
-    payload TEXT NOT NULL
+    payload TEXT NOT NULL,
+    user_id INTEGER                    -- kaydı oluşturan hesap, hesapla birlikte silinir
 );
 CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cache_created ON search_cache(created_at);
@@ -121,8 +119,6 @@ def save_report(result: dict, language: str = "Türkçe", user_id: int = 1) -> i
              language, len(result.get("articles", [])),
              result.get("elapsed", 0), json.dumps(result, ensure_ascii=False), user_id),
         )
-        conn().execute("INSERT INTO searches (date, query, author) VALUES (?,?,?)",
-                       (_now(), result.get("query", ""), ""))
         conn().commit()
         return int(cur.lastrowid)
 
@@ -179,13 +175,25 @@ def remove_from_library(item_id: int, user_id: int) -> None:
         conn().commit()
 
 
+def delete_user_content(user_id: int) -> dict:
+    """Hesabın raporlarını ve kütüphanesini kalıcı olarak siler (bkz. accounts.delete_account)."""
+    with _lock:
+        removed = {
+            "reports": conn().execute("DELETE FROM reports WHERE user_id = ?",
+                                      (user_id,)).rowcount,
+            "library": conn().execute("DELETE FROM library WHERE user_id = ?",
+                                      (user_id,)).rowcount,
+        }
+        conn().commit()
+    return removed
+
+
 def stats(user_id: int | None = None) -> dict:
     c = conn()
     if user_id is None:
         return {
             "reports": c.execute("SELECT COUNT(*) AS n FROM reports").fetchone()["n"],
             "library": c.execute("SELECT COUNT(*) AS n FROM library").fetchone()["n"],
-            "searches": c.execute("SELECT COUNT(*) AS n FROM searches").fetchone()["n"],
         }
     return {
         "reports": c.execute("SELECT COUNT(*) AS n FROM reports WHERE user_id = ?",

@@ -37,6 +37,9 @@ class SearchRequest:
     synthesize: bool = True
     refresh: bool = False          # önbelleği atlayıp taramayı baştan çalıştır
     power_mode: str = modes.DEFAULT_MODE   # low / medium / high (bkz. modes.py)
+    # Aramayı yapan hesap. Yalnız sunucu doldurur (istek gövdesinden okunmaz) ve önbellek
+    # anahtarına girmez: önbellek satırının sahibini, hesap silinince bulmak için tutulur.
+    user_id: int | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "SearchRequest":

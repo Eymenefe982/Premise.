@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from cryptography.fernet import Fernet
 
-from . import db, meter, modes, security
+from . import cache, db, meter, modes, security, store
 from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET, LOVE_EMAIL, PLANS,
                      SECRET_KEY)
 from .logging_setup import mask_email
@@ -98,11 +98,20 @@ def init() -> None:
         # Geçici şifreyle giren kullanıcı kalıcı bir şifre belirleyene kadar işaretli kalır.
         if "must_change_password" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+        # Önbellek satırı onu oluşturan hesaba bağlanır (hesap silinince silinsin diye).
+        # Eski satırların sahibi bilinmez; en fazla CACHE_TTL_DAYS içinde kendiliğinden düşer.
+        if "user_id" not in _column_names("search_cache"):
+            c.execute("ALTER TABLE search_cache ADD COLUMN user_id INTEGER")
+        # Eski sorgu günlüğü: her sorunun metnini sahipsiz ve süresiz tutuyordu. Hiçbir
+        # hesaba bağlı olmadığı için silme talebinde ayıklanamıyordu ve tek kullanımı bir
+        # sayaçtı; kaldırılır.
+        c.execute("DROP TABLE IF EXISTS searches")
         c.commit()
     migrate_library()
     with _lock:
         conn().execute("CREATE INDEX IF NOT EXISTS idx_reports_user ON reports(user_id, id DESC)")
         conn().execute("CREATE INDEX IF NOT EXISTS idx_library_user ON library(user_id, id DESC)")
+        conn().execute("CREATE INDEX IF NOT EXISTS idx_cache_user ON search_cache(user_id)")
         conn().commit()
     _seed_admin()
 
@@ -586,6 +595,28 @@ def purge_expired_tokens() -> int:
         cursor = conn().execute("DELETE FROM auth_tokens WHERE expires_at < ?", (_now(),))
         conn().commit()
     return cursor.rowcount or 0
+
+
+def delete_account(user_id: int) -> dict:
+    """Hesabı ve hesaba bağlı bütün veriyi kalıcı olarak siler (KVKK silme hakkı).
+
+    Önce içerik, en son kullanıcı satırı silinir: arada bir adım hata verirse hesap
+    hâlâ vardır ve kullanıcı silmeyi tekrar deneyebilir. Yönetici hesapları ortam
+    değişkeninden tohumlandığı için buradan silinmez (bkz. app.delete_me).
+    """
+    removed = store.delete_user_content(user_id)
+    removed["cache"] = cache.delete_for_user(user_id)
+    with _lock:
+        removed["holds"] = conn().execute(
+            "DELETE FROM credit_holds WHERE user_id = ?", (user_id,)).rowcount
+        removed["ledger"] = conn().execute(
+            "DELETE FROM credit_ledger WHERE user_id = ?", (user_id,)).rowcount
+        removed["tokens"] = conn().execute(
+            "DELETE FROM auth_tokens WHERE user_id = ?", (user_id,)).rowcount
+        conn().execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn().commit()
+    log.info("account %d deleted: %s", user_id, removed)
+    return removed
 
 
 def mark_email_verified(user_id: int) -> None:

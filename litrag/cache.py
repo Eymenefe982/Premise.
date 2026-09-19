@@ -95,17 +95,30 @@ def put(key: str, req, result: dict) -> None:
     # (3.24+) çalışır. Önceden SQLite yolu düz INSERT'ti: "run it fresh" ile aynı
     # anahtar ikinci kez yazılınca IntegrityError verip aramayı, parası harcandıktan
     # sonra düşürüyordu.
+    # Kaydı yazan hesap saklanır: hesap silindiğinde onun sorusundan üretilen önbellek
+    # satırı da silinebilsin (bkz. delete_for_user). Başka bir kullanıcıya dönen
+    # sonuçta bu alan yer almaz.
     upsert = ("INSERT INTO search_cache (key, created_at, last_used, query, language,"
-              " max_articles, hits, payload) VALUES (?,?,?,?,?,?,"
-              " COALESCE((SELECT hits FROM search_cache WHERE key = ?), 0), ?)"
+              " max_articles, hits, payload, user_id) VALUES (?,?,?,?,?,?,"
+              " COALESCE((SELECT hits FROM search_cache WHERE key = ?), 0), ?, ?)"
               " ON CONFLICT (key) DO UPDATE SET"
               " created_at = EXCLUDED.created_at, last_used = EXCLUDED.last_used,"
               " query = EXCLUDED.query, language = EXCLUDED.language,"
-              " max_articles = EXCLUDED.max_articles, payload = EXCLUDED.payload")
+              " max_articles = EXCLUDED.max_articles, payload = EXCLUDED.payload,"
+              " user_id = EXCLUDED.user_id")
     with _lock:
         conn().execute(upsert, (key, now, now, req.query, req.language,
-                                req.max_articles, key, payload))
+                                req.max_articles, key, payload,
+                                getattr(req, "user_id", None)))
         conn().commit()
+
+
+def delete_for_user(user_id: int) -> int:
+    """Hesabın sorularından üretilmiş önbellek satırlarını siler."""
+    with _lock:
+        cur = conn().execute("DELETE FROM search_cache WHERE user_id = ?", (user_id,))
+        conn().commit()
+        return cur.rowcount
 
 
 def purge_expired(ttl_days: int = CACHE_TTL_DAYS) -> int:

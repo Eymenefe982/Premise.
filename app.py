@@ -38,7 +38,8 @@ from litrag.config import (ACCESS_TOKEN_HOURS, ALLOWED_ORIGINS, ANALYTICS_SITE,
 from litrag.logging_setup import audit, configure as configure_logging, log
 from litrag.pdf import to_pdf
 from litrag.pipeline import SearchCancelled, SearchRequest, run_search
-from litrag.schemas import (ExportIn, ForgotPasswordIn, GrantIn, LibraryIn, LoginIn,
+from litrag.schemas import (AccountDeleteIn, ExportIn, ForgotPasswordIn, GrantIn, LibraryIn,
+                            LoginIn,
                             NcbiKeyIn, PasswordChangeIn, SearchIn,
                             SignupIn, VerifyEmailIn)
 
@@ -201,11 +202,23 @@ def _user_from_cookie(request: Request, cookie: str, kind: str) -> dict | None:
     return user
 
 
-def current_user(request: Request) -> dict:
-    """Oturum çerezini doğrular. Geçersizse 401 verir."""
+def current_user(request: Request, response: Response) -> dict:
+    """Oturum çerezini doğrular. Geçersizse 401 verir.
+
+    Erişim jetonu ACCESS_TOKEN_HOURS'ta dolar. Yenileme jetonu hâlâ geçerliyse (süresi
+    dolmamış, çıkışta geri alınmamış, şifre değişiminden önce verilmemiş) oturum burada
+    sessizce uzatılır ve yeni bir erişim çerezi yazılır. Önceden arayüz yenileme ucunu
+    hiç çağırmadığı için "30 gün oturumda kal" vaadine rağmen herkes 2 saatte bir
+    oturumdan düşüyordu."""
     user = _user_from_cookie(request, ACCESS_COOKIE, "access")
     if user is None:
-        raise HTTPException(401, "No active session, please sign in.")
+        user = _user_from_cookie(request, REFRESH_COOKIE, "refresh")
+        if user is None:
+            raise HTTPException(401, "No active session, please sign in.")
+        _set_cookie(response, ACCESS_COOKIE,
+                    security.issue_token(accounts.jwt_secret(), user["id"], "access",
+                                         int(user.get("session_epoch") or 0)),
+                    ACCESS_TOKEN_HOURS * 3600)
     return accounts.roll_period(user)
 
 
@@ -317,6 +330,37 @@ async def logout(request: Request, response: Response) -> dict:
 @app.get("/api/me")
 async def me(user: dict = Depends(current_user)) -> dict:
     return {**accounts.public(user), "stats": store.stats(user["id"])}
+
+
+@app.delete("/api/me")
+async def delete_me(body: AccountDeleteIn, request: Request, response: Response,
+                    user: dict = Depends(current_user)) -> dict:
+    """Hesabı ve hesaba bağlı bütün veriyi kalıcı olarak siler.
+
+    Oturum çerezi yetmez, şifre yeniden istenir: açık kalmış bir tarayıcıda başkası
+    hesabı geri dönüşsüz silemesin. Yanlış şifreler giriş denemeleriyle aynı sayaca
+    yazılır, bu uç şifre tahmini için ikinci bir kapı olmaz."""
+    ip = _client_key(request)
+    if accounts.is_admin(user):
+        raise HTTPException(400, "Administrator accounts cannot be deleted from the app.")
+    if security.login_failures.blocked(user["email"]):
+        raise HTTPException(429, "Too many incorrect passwords. Please wait a moment.")
+    if not security.verify_password(user["password_hash"], body.password):
+        security.login_failures.allow(user["email"])
+        audit("account_delete", user_id=user["id"], ip=ip, ok=False, reason="bad_password")
+        raise HTTPException(400, "Password is incorrect.")
+    # Süren bir arama bittiğinde silinmiş hesaba rapor ve kredi kaydı yazardı.
+    if any(job["user_id"] == user["id"] and not job.get("finished_at")
+           for job in list(_jobs.values())):
+        raise HTTPException(409, "A search is still running. Wait for it to finish, "
+                                 "then try again.")
+    removed = accounts.delete_account(user["id"])
+    audit("account_delete", user_id=user["id"], email=user["email"], ip=ip,
+          **{key: value for key, value in removed.items()})
+    mailer.send_account_deleted(user["email"])
+    for name in (ACCESS_COOKIE, REFRESH_COOKIE):
+        response.delete_cookie(name, path="/")
+    return {"ok": True}
 
 
 @app.post("/api/me/password")
@@ -483,6 +527,7 @@ async def start_search(body: SearchIn, request: Request,
         raise HTTPException(403, "Your plan does not include this power mode. "
                                  "Upgrade your plan to run high-power searches.")
     req = SearchRequest.from_dict(payload)
+    req.user_id = user["id"]            # önbellek satırının sahibi (bkz. cache.put)
 
     # Kredi aramaya başlamadan bloke edilir; gerçek maliyet belli olunca fark iade
     # edilir. Okuyup sonra düşmek, eşzamanlı aramalarda bakiyenin aşılmasına izin verirdi.
@@ -490,6 +535,9 @@ async def start_search(body: SearchIn, request: Request,
     # (sunucu yeniden başladıysa) önce iade edilir, kullanıcı bakiyesini geri görür.
     job_id = uuid.uuid4().hex[:12]
     accounts.release_stale_holds()
+    # Gizlilik politikası önbelleğin 7 günde silindiğini söyler; yalnız açılışta
+    # temizlemek, uzun süre yeniden başlamayan bir sunucuda bu sözü bozardı.
+    cache.purge_expired()
     needed = accounts.max_cost_of(req)
     if not accounts.reserve(user["id"], needed, hold_id=job_id):
         left = accounts.balance(user)

@@ -63,6 +63,8 @@
   .btn:hover{ background:var(--accent-hover); }
   .btn.ghost{ background:var(--surface-2); color:var(--ink-2); border:1px solid var(--border); }
   .btn.ghost:hover{ background:var(--border); }
+  .btn.danger{ background:var(--danger); }
+  .btn.danger:hover{ background:var(--danger); filter:brightness(.9); }
 
   .flag{ border-radius:var(--radius-sm); padding:10px 13px; font-size:13px; margin-top:12px; }
   .flag.ok{ background:var(--ok-soft); color:var(--ok); }
@@ -173,6 +175,21 @@
       <button class="btn" id="save-pw">Update</button>
     </div>
     <div class="flag" id="pw-msg" hidden></div>
+  </div>
+
+  <!-- delete account -->
+  <div class="card">
+    <h2>Delete account</h2>
+    <p class="sub">
+      Permanently deletes your account and everything stored under it: search history,
+      reports, library, credit history, and cached answers created from your questions.
+      This cannot be undone.
+    </p>
+    <div class="inline">
+      <input type="password" id="del-pw" placeholder="Your password" autocomplete="current-password">
+      <button class="btn danger" id="delete-account">Delete my account</button>
+    </div>
+    <div class="flag" id="del-msg" hidden></div>
   </div>
 
   <!-- contact -->
@@ -313,6 +330,29 @@
            : Array.isArray(d.detail) ? (d.detail[0]?.msg || 'Could not update the password.')
            : 'Could not update the password.', false);
     }
+  });
+
+  $('delete-account').addEventListener('click', async () => {
+    const password = $('del-pw').value;
+    if (!password){
+      return flag($('del-msg'), 'Enter your password to confirm.', false);
+    }
+    if (!confirm('Delete your Premise account and all of its data? This cannot be undone.')) return;
+    const btn = $('delete-account');
+    btn.disabled = true;
+    const res = await fetch('/api/me', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok){
+      flag($('del-msg'), 'Your account has been deleted.', true);
+      setTimeout(() => location.replace('/giris'), 1200);
+      return;
+    }
+    btn.disabled = false;
+    flag($('del-msg'), typeof d.detail === 'string' ? d.detail : 'Could not delete the account.', false);
   });
 
   $('logout').addEventListener('click', async e => {

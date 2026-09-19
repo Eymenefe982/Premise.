@@ -59,6 +59,11 @@ class PasswordChangeIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class AccountDeleteIn(BaseModel):
+    """Silme geri alınamaz: oturum çerezi yetmez, şifre yeniden istenir."""
+    password: str = Field(min_length=1, max_length=128)
+
+
 class ForgotPasswordIn(BaseModel):
     email: EmailStr
 

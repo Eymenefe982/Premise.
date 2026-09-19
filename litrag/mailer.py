@@ -98,6 +98,18 @@ If you did not request this, you can ignore this email: nothing has changed.
 {APP_NAME}""")
 
 
+def send_account_deleted(to: str) -> None:
+    send(to, f"Your {APP_NAME} account has been deleted",
+         f"""Hi,
+
+Your {APP_NAME} account and everything stored under it (search history,
+reports, library and credit history) have been permanently deleted.
+
+If you did not do this, contact us right away at premise.litapp@gmail.com.
+
+{APP_NAME}""")
+
+
 def send_email_verification(to: str, token: str, valid_hours: int) -> None:
     link = f"{APP_URL}/eposta-dogrula?token={token}"
     send(to, f"Verify your {APP_NAME} email address",

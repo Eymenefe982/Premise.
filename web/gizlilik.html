@@ -66,6 +66,14 @@
     inside the application. Administrative access is limited to account status (plan, credit
     balance, email verification) and never extends to search content.
   </p>
+  <p>
+    <b>Shared answer cache.</b> To avoid paying twice for the same work, the answer to a question
+    is kept for up to 7 days. If another user asks the identical question with the same settings
+    in that window, they receive the same literature summary, marked "reused", without learning
+    who asked it or when beyond the age of the answer. Each cached answer is linked to the
+    account whose question produced it and is deleted together with that account; otherwise it
+    is deleted automatically after 7 days.
+  </p>
   <div class="callout">
     <b>What this does not cover:</b> whoever operates the underlying database server (currently
     Neon/Postgres) retains the technical ability to query it directly, the way any database
@@ -90,8 +98,14 @@
       <td>Finds matching articles. These are public literature databases, not your identity</td>
     </tr>
     <tr>
+      <td>OpenAlex and Unpaywall</td>
+      <td>Identifiers (DOIs) of the matched articles, never your question</td>
+      <td>Adds citation counts and links to legal free full texts</td>
+    </tr>
+    <tr>
       <td>Brevo (email delivery)</td>
-      <td>Your email address, for account emails only (welcome, verification, password reset)</td>
+      <td>Your email address, for account emails only (welcome, verification, password reset,
+        account deletion)</td>
       <td>Delivers transactional email, never your search content</td>
     </tr>
   </table>
@@ -103,8 +117,16 @@
   <h2>3. Where data is stored</h2>
   <p>
     Accounts, credit balances, search history and library entries are stored in a managed
-    Postgres database (Neon). Prior sessions (JWT refresh tokens) are stored hashed. Passwords
-    are stored as salted hashes, never in plain text.
+    Postgres database (Neon). Passwords are stored as salted hashes, never in plain text.
+    Sign-in sessions are signed tokens kept in your browser's cookies; the server does not store
+    them, only a fingerprint of a session you ended by signing out, so it cannot be reused.
+  </p>
+  <p>
+    For security, sign-in events (sign-in, sign-out, password changes, failed attempts, account
+    deletion) are written to the server log with the time, your IP address and a masked form of
+    your email address (for example <code>a***@example.com</code>). These log lines never contain
+    your questions or results. They are kept by our hosting provider (Render) for a limited
+    period and then rotated out.
   </p>
 
   <h2>4. Special-category data and cross-border transfer</h2>
@@ -122,7 +144,7 @@
   <table>
     <tr><th>Cookie</th><th>Purpose</th><th>Lifetime</th></tr>
     <tr><td>premise_session</td><td>Short-lived sign-in session</td><td>2 hours</td></tr>
-    <tr><td>premise_refresh</td><td>Keeps you signed in between visits</td><td>30 days</td></tr>
+    <tr><td>premise_refresh</td><td>Keeps you signed in between visits</td><td>30 days from sign-in</td></tr>
   </table>
   <p>
     Both are HTTP-only (not readable by scripts) and sent only over HTTPS. We do not use
@@ -145,9 +167,15 @@
 
   <h2>6. Your rights</h2>
   <p>
-    You can request a copy of your data, ask us to delete your account and associated searches,
-    or withdraw consent at any time by contacting us at the address below. Deleting your account
-    removes your stored searches and library from the database.
+    You can delete your account yourself at any time from your account page
+    (<a href="/hesap">My account</a> → Delete account). Deletion is immediate and permanent: it
+    removes your account, search history and reports, library, credit history, and the cached
+    answers created from your questions. Only the masked security log lines described in section 3
+    remain until the hosting provider rotates them out.
+  </p>
+  <p>
+    Deleting your account also withdraws your consent. To request a copy of your data, or if you
+    cannot sign in, contact us at the address below.
   </p>
 
   <h2>7. Not a clinical decision tool</h2>
