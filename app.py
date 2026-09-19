@@ -40,7 +40,7 @@ from litrag.pdf import to_pdf
 from litrag.pipeline import SearchCancelled, SearchRequest, run_search
 from litrag.schemas import (AccountDeleteIn, ExportIn, ForgotPasswordIn, GrantIn, LibraryIn,
                             LoginIn,
-                            NcbiKeyIn, PasswordChangeIn, SearchIn,
+                            PasswordChangeIn, SearchIn,
                             SignupIn, VerifyEmailIn)
 
 @asynccontextmanager
@@ -427,12 +427,6 @@ async def resend_verification(request: Request, user: dict = Depends(current_use
         raise HTTPException(429, "Too many requests. Please wait a moment.")
     _send_verification(user)
     return {"ok": True}
-
-
-@app.post("/api/me/ncbi-key")
-async def save_ncbi_key(body: NcbiKeyIn, user: dict = Depends(current_user)) -> dict:
-    accounts.set_ncbi_key(user["id"], body.api_key)
-    return {"ok": True, "has_ncbi_key": bool(body.api_key)}
 
 
 @app.get("/api/me/ledger")

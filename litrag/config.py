@@ -104,7 +104,6 @@ CLAIM_CHECK_ENABLED = os.getenv("CLAIM_CHECK_ENABLED", "1").strip() not in ("0",
 # --- Hesaplar ve oturum ---
 # Boş bırakılırsa ilk açılışta üretilip veritabanında saklanır (bkz. accounts.app_secret).
 JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
-SECRET_KEY = os.getenv("SECRET_KEY", "").strip()      # NCBI anahtarlarını şifreler
 ACCESS_TOKEN_HOURS = int(os.getenv("ACCESS_TOKEN_HOURS", "2"))
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "30"))
 

@@ -42,14 +42,6 @@
   .row .k{ color:var(--muted); }
   .row .v{ color:var(--ink); text-align:right; }
 
-  ol.steps{ margin:0 0 18px; padding-left:0; list-style:none; counter-reset:s; display:flex; flex-direction:column; gap:11px; }
-  ol.steps li{ display:flex; gap:11px; counter-increment:s; font-size:14px; color:var(--ink-2); line-height:1.5; }
-  ol.steps li::before{
-    content:counter(s); flex:none; width:22px; height:22px; border-radius:50%;
-    background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:600;
-    display:flex; align-items:center; justify-content:center; margin-top:1px;
-  }
-
   .inline{ display:flex; gap:9px; flex-wrap:wrap; }
   .inline input{
     flex:1; min-width:220px; border:1px solid var(--border-strong); border-radius:var(--radius-sm);
@@ -92,12 +84,6 @@
     </div>
   </div>
 
-  <!-- first step after signup -->
-  <div class="card" id="welcome" hidden>
-    <h2>Welcome</h2>
-    <p class="sub">One step left before you start: your own NCBI search key.</p>
-  </div>
-
   <!-- user signed in with a temporary password -->
   <div class="card" id="force-pw" hidden>
     <h2>Change your password</h2>
@@ -114,29 +100,6 @@
       <button class="btn" id="resend-verify">Resend verification email</button>
     </div>
     <div class="flag" id="verify-msg" hidden></div>
-  </div>
-
-  <!-- NCBI key -->
-  <div class="card">
-    <h2>NCBI search key <span class="pill" id="key-state">none</span></h2>
-    <p class="sub">
-      NCBI asks every user to use their own key. The key is <b>free</b>, takes two minutes
-      to get, and raises your PubMed rate limit from 3 requests/second to 10. Your key is
-      stored encrypted.
-    </p>
-    <ol class="steps">
-      <li>Open <a href="https://account.ncbi.nlm.nih.gov/settings/" target="_blank" rel="noopener">account.ncbi.nlm.nih.gov/settings</a></li>
-      <li>Create an NCBI account or sign in with your Google account</li>
-      <li>Scroll to the <b>API Key Management</b> section on the page</li>
-      <li>Click <b>Create an API Key</b></li>
-      <li>Copy the generated key and paste it below</li>
-    </ol>
-    <div class="inline">
-      <input type="text" id="ncbi" placeholder="e.g. a1b2c3d4e5f6..." autocomplete="off" spellcheck="false">
-      <button class="btn" id="save-key">Save</button>
-      <button class="btn ghost" id="skip-key">Not now</button>
-    </div>
-    <div class="flag ok" id="key-msg" hidden></div>
   </div>
 
   <!-- credits -->
@@ -205,9 +168,6 @@
 <script>
 (function(){
   const $ = id => document.getElementById(id);
-  const first = new URLSearchParams(location.search).has('ilk');
-  if (first) $('welcome').hidden = false;
-
   function esc(text){
     return String(text ?? '').replace(/[&<>"']/g, c =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -224,7 +184,6 @@
     if (!res.ok) return location.replace('/giris');
     const me = await res.json();
 
-    $('key-state').textContent = me.has_ncbi_key ? 'on file' : 'none';
     $('plan-line').textContent = me.is_admin
       ? 'Administrator account: all features unlimited.'
       : me.love ? 'Unlimited credits · full-text reading on'
@@ -276,23 +235,6 @@
       </div>`).join('');
   }
 
-  $('save-key').addEventListener('click', async () => {
-    const res = await fetch('/api/me/ncbi-key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: $('ncbi').value.trim() }),
-    });
-    if (res.ok){
-      flag($('key-msg'), 'Key saved.', true);
-      $('ncbi').value = '';
-      load();
-      if (first) setTimeout(() => location.replace('/'), 900);
-    } else {
-      const d = await res.json().catch(() => ({}));
-      flag($('key-msg'), typeof d.detail === 'string' ? d.detail : 'Could not save the key.', false);
-    }
-  });
-
   $('resend-verify').addEventListener('click', async () => {
     const btn = $('resend-verify');
     btn.disabled = true;
@@ -305,11 +247,6 @@
       flag($('verify-msg'), typeof d.detail === 'string' ? d.detail : 'Could not send the email.', false);
     }
     btn.disabled = false;
-  });
-
-  $('skip-key').addEventListener('click', () => {
-    if (first) location.replace('/');
-    else flag($('key-msg'), 'Works without a key too, searches will just be a bit slower.', true);
   });
 
   $('save-pw').addEventListener('click', async () => {

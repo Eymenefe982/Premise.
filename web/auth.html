@@ -165,10 +165,9 @@
                     : Array.isArray(detail) ? (detail[0]?.msg || 'Please check your details.')
                     : 'Something went wrong, please try again.');
       }
-      // New signups go through the NCBI key wizard first; a temporary password
-      // means a permanent one must be set first, otherwise straight into the app.
-      const dest = mode === 'signup' ? '/hesap?ilk=1'
-                 : data.must_change_password ? '/hesap' : '/';
+      // A temporary password means a permanent one must be set first; everyone else,
+      // including new signups (the app asks them to verify their email), goes straight in.
+      const dest = data.must_change_password ? '/hesap' : '/';
       location.replace(dest);
     } catch {
       fail('Could not reach the server.');

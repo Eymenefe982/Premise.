@@ -75,6 +75,25 @@ def test_cache_rows_are_owned_and_deleted_with_their_owner(client):
     assert cache.delete_for_user(42) == 1
 
 
+# ----------------------------------------------------------- kullanılmayan NCBI anahtarı
+def test_stored_ncbi_keys_are_removed_but_accounts_kept(client):
+    user_id = _signup(client, "anahtarli@example.com")
+    conn().execute("ALTER TABLE users ADD COLUMN ncbi_key_enc TEXT NOT NULL DEFAULT ''")
+    conn().execute("UPDATE users SET ncbi_key_enc = 'gAAAA-sifreli' WHERE id = ?", (user_id,))
+    conn().execute("INSERT INTO app_settings (key, value) VALUES ('secret_key', 'eski')")
+    conn().commit()
+    accounts.init()
+    assert "ncbi_key_enc" not in conn().column_names("users")
+    assert conn().execute("SELECT 1 FROM app_settings WHERE key = 'secret_key'").fetchone() is None
+    assert accounts.by_id(user_id)["email"] == "anahtarli@example.com"
+
+
+def test_ncbi_key_endpoint_and_field_are_gone(client):
+    _signup(client, "anahtarsiz@example.com")
+    assert client.post("/api/me/ncbi-key", json={"api_key": "abc"}).status_code in (404, 405)
+    assert "has_ncbi_key" not in client.get("/api/me").json()
+
+
 # --------------------------------------------------------------------- hesap silme
 def test_delete_requires_the_password(client, outbox):
     _signup(client)

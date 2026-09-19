@@ -77,18 +77,6 @@ class VerifyEmailIn(BaseModel):
     token: str = Field(min_length=16, max_length=256)
 
 
-class NcbiKeyIn(BaseModel):
-    api_key: str = Field(default="", max_length=120)
-
-    @field_validator("api_key")
-    @classmethod
-    def clean(cls, v: str) -> str:
-        v = v.strip()
-        if v and not v.replace("-", "").isalnum():
-            raise ValueError("The NCBI key can only contain letters, digits and hyphens.")
-        return v
-
-
 class SearchIn(BaseModel):
     query: str = Field(min_length=3, max_length=500)
     author: str = Field(default="", max_length=120)

@@ -6,11 +6,8 @@ import secrets
 import threading
 from datetime import datetime, timedelta
 
-from cryptography.fernet import Fernet
-
 from . import cache, db, meter, modes, security, store
-from .config import (ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET, LOVE_EMAIL, PLANS,
-                     SECRET_KEY)
+from .config import ADMIN_EMAIL, ADMIN_PASSWORD, JWT_SECRET, LOVE_EMAIL, PLANS
 from .logging_setup import mask_email
 from .store import conn, migrate_library
 
@@ -34,7 +31,6 @@ CREATE TABLE IF NOT EXISTS users (
     credits_used INTEGER NOT NULL DEFAULT 0,
     credits_extra INTEGER NOT NULL DEFAULT 0,
     period_start TEXT NOT NULL,
-    ncbi_key_enc TEXT NOT NULL DEFAULT '',
     kvkk_consent_at TEXT,
     created_at TEXT NOT NULL,
     last_login_at TEXT
@@ -98,6 +94,12 @@ def init() -> None:
         # Geçici şifreyle giren kullanıcı kalıcı bir şifre belirleyene kadar işaretli kalır.
         if "must_change_password" not in user_columns:
             c.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+        # Kullanıcıdan istenen NCBI anahtarı hiçbir aramada kullanılmıyordu (sunucu kendi
+        # anahtarını kullanır). Saklanmış anahtarlar ve onları şifreleyen anahtar silinir:
+        # işe yaramayan bir sırrı tutmak yalnızca sızma riski taşır.
+        if "ncbi_key_enc" in user_columns:
+            c.execute("ALTER TABLE users DROP COLUMN ncbi_key_enc")
+        c.execute("DELETE FROM app_settings WHERE key = 'secret_key'")
         # Önbellek satırı onu oluşturan hesaba bağlanır (hesap silinince silinsin diye).
         # Eski satırların sahibi bilinmez; en fazla CACHE_TTL_DAYS içinde kendiliğinden düşer.
         if "user_id" not in _column_names("search_cache"):
@@ -125,8 +127,7 @@ def app_secret(name: str, default: str = "") -> str:
         row = conn().execute("SELECT value FROM app_settings WHERE key = ?", (name,)).fetchone()
         if row:
             return row["value"]
-        value = (Fernet.generate_key().decode() if name == "secret_key"
-                 else secrets.token_urlsafe(48))
+        value = secrets.token_urlsafe(48)
         conn().execute("INSERT INTO app_settings (key, value) VALUES (?,?)", (name, value))
         conn().commit()
         return value
@@ -134,10 +135,6 @@ def app_secret(name: str, default: str = "") -> str:
 
 def jwt_secret() -> str:
     return app_secret("jwt_secret", JWT_SECRET)
-
-
-def field_key() -> str:
-    return app_secret("secret_key", SECRET_KEY)
 
 
 # --------------------------------------------------------------------- kullanıcılar
@@ -298,18 +295,6 @@ def _seed_admin() -> None:
             )
         conn().commit()
     log.info("admin account created: %s", mask_email(ADMIN_EMAIL))
-
-
-# ------------------------------------------------------------------ NCBI anahtarı
-def set_ncbi_key(user_id: int, key: str) -> None:
-    blob = security.encrypt(field_key(), key.strip()) if key.strip() else ""
-    with _lock:
-        conn().execute("UPDATE users SET ncbi_key_enc = ? WHERE id = ?", (blob, user_id))
-        conn().commit()
-
-
-def ncbi_key(user: dict) -> str:
-    return security.decrypt(field_key(), user.get("ncbi_key_enc") or "")
 
 
 # ------------------------------------------------------------------------ krediler
@@ -650,7 +635,6 @@ def public(user: dict) -> dict:
                               "articles": p.max_articles,
                               "fulltext": p.fulltext_top_n}
                        for name, p in modes.PROFILES.items()},
-        "has_ncbi_key": bool(user.get("ncbi_key_enc")),
         "email_verified": bool(user.get("email_verified_at")),
         "must_change_password": bool(user.get("must_change_password")),
         "period_start": user["period_start"],

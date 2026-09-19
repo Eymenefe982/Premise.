@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError, InvalidHashError
-from cryptography.fernet import Fernet, InvalidToken
 
 from .config import ACCESS_TOKEN_HOURS, REFRESH_TOKEN_DAYS
 
@@ -94,22 +93,6 @@ def token_fingerprint(token: str) -> str:
     SHA-256 yeterli ve hızlıdır."""
     return hashlib.sha256(token.encode()).hexdigest()
 
-
-# --------------------------------------------------------------------- şifreleme
-def encrypt(secret_key: str, value: str) -> str:
-    """Kullanıcının NCBI anahtarı gibi alanları saklamadan önce şifreler."""
-    if not value:
-        return ""
-    return Fernet(secret_key.encode()).encrypt(value.encode()).decode()
-
-
-def decrypt(secret_key: str, blob: str) -> str:
-    if not blob:
-        return ""
-    try:
-        return Fernet(secret_key.encode()).decrypt(blob.encode()).decode()
-    except (InvalidToken, ValueError):
-        return ""
 
 
 # --------------------------------------------------------------------- hız sınırı
