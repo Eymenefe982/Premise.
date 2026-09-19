@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premise — My account</title>
+<title>Premise | My account</title>
 <meta name="description" content="Manage your Premise account, credits and settings.">
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="/static/style.css">
@@ -209,7 +209,7 @@
 
     $('key-state').textContent = me.has_ncbi_key ? 'on file' : 'none';
     $('plan-line').textContent = me.is_admin
-      ? 'Administrator account — all features unlimited.'
+      ? 'Administrator account: all features unlimited.'
       : me.love ? 'Unlimited credits · full-text reading on'
       : `${me.plan_label} plan · full-text reading ${me.fulltext_allowed ? 'on' : 'off'}`;
     $('period').textContent = (me.period_start || '').slice(0, 10);

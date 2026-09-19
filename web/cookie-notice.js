@@ -14,7 +14,7 @@
 
   var text = document.createElement('span');
   text.style.flex = '1';
-  text.innerHTML = 'We only use essential cookies to keep you signed in — no tracking or ' +
+  text.innerHTML = 'We only use essential cookies to keep you signed in. No tracking or ' +
     'advertising cookies. <a href="/gizlilik#cookies" style="color:#7fd3c9">Learn more</a>';
 
   var btn = document.createElement('button');

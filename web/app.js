@@ -1,4 +1,4 @@
-/* Premise front end — no dependencies, single file. */
+/* Premise front end: no dependencies, single file. */
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -590,7 +590,7 @@ function renderEvidenceNotice(result) {
   const lines = [];
   if (result.answer_mode === "limited") {
     lines.push(`<b>Limited answer.</b> Only ${result.relevant_count} article(s) directly
-      investigate your question — not enough to build a recommendation on. The report
+      investigate your question, not enough to build a recommendation on. The report
       therefore skips clinical inference and reports the studies one by one instead.`);
   }
   if (result.low_evidence) {
@@ -602,11 +602,11 @@ function renderEvidenceNotice(result) {
                    "publication type filters": "publication-type filters" };
     const names = (result.relaxed || []).map((r) => what[r] || r).join(" and ");
     lines.push(`The initial search did not return enough results, so it was rerun with the
-      ${names} limit removed — the list may include articles outside your original criteria.`);
+      ${names} limit removed, so the list may include articles outside your original criteria.`);
   }
   if (off) {
     lines.push(`${off} article(s) in the list do not match your chosen publication-type filter
-      and are marked <b>Off filter</b>. They were pushed down in ranking, not removed — so
+      and are marked <b>Off filter</b>. They were pushed down in ranking, not removed, so
       records with missing publication-type data are not unfairly discarded.`);
   }
   if (result.low_evidence) {
@@ -625,7 +625,7 @@ function noAnswerHtml(result) {
     <h3>No article was found that directly answers this question</h3>
     <p>The search returned ${result.pool_size} record(s), but none of them address your
        question directly. Rather than write a confident-sounding answer from a handful of
-       unrelated articles, we stopped — an answer like that would look sourced and be more
+       unrelated articles, we stopped: an answer like that would look sourced and be more
        misleading because of it.
        <b>No credit was charged for this search.</b></p>
     ${tips ? `<p>Things you could try:</p><ul>${tips}</ul>` : ""}

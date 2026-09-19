@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premise — How it works</title>
+<title>Premise | How it works</title>
 <meta name="description" content="How Premise works: from a clinical question to a cited, evidence-graded summary of the published literature.">
 <link rel="canonical" href="__APP_URL__/tanitim">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Premise">
-<meta property="og:title" content="Premise — How it works">
+<meta property="og:title" content="Premise | How it works">
 <meta property="og:description" content="How Premise works: from a clinical question to a cited, evidence-graded summary of the published literature.">
 <meta property="og:url" content="__APP_URL__/tanitim">
 <meta property="og:image" content="__APP_URL__/static/img/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Premise — Evidence-based literature assistant">
+<meta property="og:image:alt" content="Premise: evidence-based literature assistant">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/static/img/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
@@ -125,7 +125,7 @@
   .tag{ font-family:"IBM Plex Mono", monospace; font-size:10.5px; }
   .tag.y{ color:var(--ok); } .tag.n{ color:var(--no); }
 
-  .claim{ border-left:2px solid var(--brand); background:var(--bg); padding:12px 15px; border-radius:0 9px 9px 0; font-size:14px; line-height:1.6; color:var(--ink); }
+  .claim{ border:1px solid var(--line); background:var(--bg); padding:12px 15px; border-radius:9px; font-size:14px; line-height:1.6; color:var(--ink); }
   .cite{ font-family:"IBM Plex Mono", monospace; font-size:11.5px; color:var(--brand-deep); }
   .passage{ border:1px dashed var(--line); border-radius:9px; padding:12px 15px; font-size:13px; line-height:1.65; color:var(--ink-soft); background:var(--bg); }
   .passage mark{ background:var(--brand-tint); color:var(--brand-deep); padding:0 3px; border-radius:3px; }
@@ -190,7 +190,7 @@
         </div>
         <div class="xarrow">↓</div>
         <div class="xrow">
-          <div class="xlabel">PubMed query — with MeSH terms</div>
+          <div class="xlabel">PubMed query with MeSH terms</div>
           <div class="xval code">("Atrial Fibrillation"[Mesh] AND "Anticoagulants"[Mesh] AND "Aged"[Mesh])</div>
         </div>
       </div>
@@ -228,7 +228,7 @@
     <section class="scene">
       <div class="eyebrow">04 · Verification</div>
       <h2>If a figure isn't in the source text,<br>it doesn't enter the report either</h2>
-      <p class="lede">Effect size, confidence interval, sample size and p value are extracted from each article — then each one is <b>searched for verbatim in the source text</b>. A finding that can't be found is quietly dropped.</p>
+      <p class="lede">Effect size, confidence interval, sample size and p value are extracted from each article. Then each one is <b>searched for verbatim in the source text</b>. A finding that can't be found is quietly dropped.</p>
       <div class="tblwrap">
         <table>
           <thead><tr><th>Outcome</th><th>Measure</th><th>95% CI</th><th>Status</th></tr></thead>
@@ -239,7 +239,7 @@
           </tbody>
         </table>
       </div>
-      <p class="lede">Sign errors are corrected too — <span class="mono">MD 136.03</span> and <span class="mono">MD −136.03</span> are opposite results. For ratio measures a negative confidence-interval bound is rejected, and reversed bounds are corrected.</p>
+      <p class="lede">Sign errors are corrected too: <span class="mono">MD 136.03</span> and <span class="mono">MD −136.03</span> are opposite results. For ratio measures a negative confidence-interval bound is rejected, and reversed bounds are corrected.</p>
     </section>
 
     <section class="scene">
@@ -270,7 +270,7 @@
         <span class="fmt">RIS</span><span class="fmt">BibTeX</span><span class="fmt">CSV</span>
       </div>
       <p class="lede">The RIS file imports directly into <b>Zotero, Mendeley and EndNote</b>. The PDF output keeps the numeric findings tables and clickable PMID / DOI links.</p>
-      <p class="lede">Asking the same question with the same settings again returns the stored result — <b>free and instant</b>. The result is always labelled as reused from an earlier search, with a button next to it to run the search fresh.</p>
+      <p class="lede">Asking the same question with the same settings again returns the stored result, <b>free and instant</b>. The result is always labelled as reused from an earlier search, with a button next to it to run the search fresh.</p>
       <a class="cta" href="/giris">Create account</a>
     </section>
 
