@@ -96,12 +96,13 @@ PROFILES: dict[str, Profile] = {
         summary="Balanced depth: full-text reading and verified numbers.",
         use_case="The everyday setting for a clinical question — enough depth to "
                  "quote a number, without paying for a full review.",
-        # Bekçi adımları lite'tan guard modeline çıkınca fiyat tablosundan hesaplanan
-        # tipik maliyet ~0,70'ten ~0,80 TL'ye çıkar; tavan 1,00 TL'nin altında kalır ve
-        # rezervasyon tavana bağlı olduğu için değişmez. Ölçülmüş bir değer değil,
-        # MODEL_PRICES üzerinden tahmindir: canlıda bir arama sonrası usage.cost_try ile
-        # doğrulanıp bu sayı güncellenmeli.
-        ceiling_try=1.00, estimate_try=0.80,
+        # Canlıda ölçüldü (2026-09-19, bekçi yükseltmesinden SONRA): basit bir soru
+        # 0,4736 TL (14 kredi). Yükseltmeden önce ağır sorular 0,595 ve 0,747 TL
+        # ölçülmüştü, yani maliyeti asıl belirleyen sorunun ağırlığı: kaç makale döndüğü
+        # ve özetlerin uzunluğu. Tahmin bu yüzden ucuz uçtaki tek ölçüme değil aralığın
+        # ortasına konur — kullanıcıya olduğundan ucuz görünmek, sonradan beklediğinden
+        # çok kredi düşmekten kötüdür.
+        ceiling_try=1.00, estimate_try=0.70,
         stages={
             "translate": Stage(GEMINI_GUARD_MODEL, 300),
             "triage":    Stage(GEMINI_GUARD_MODEL, 800),
@@ -120,8 +121,13 @@ PROFILES: dict[str, Profile] = {
         summary="A deep report: the widest net, long full texts and data tables.",
         use_case="For work you will have to defend — a case presentation, a journal "
                  "club, a review draft, or a decision someone will question.",
-        # ölçülen 2,349 TL + bekçi yükseltmesinin fiyat tablosundan tahmini payı (~0,13).
-        ceiling_try=5.00, estimate_try=2.65,
+        # Canlıda ölçüldü (2026-09-19, bekçi yükseltmesinden SONRA): 2,8320 TL (85 kredi,
+        # 37.231/11.679 token). Yükseltmeden önce 2,349 TL ölçülmüştü; aradaki fark
+        # fiyat tablosundan beklediğimden (~0,13) büyük çıktı, ama sorular aynı olmadığı
+        # için bu farkın tamamı yükseltmeye yazılamaz. Tahmin ölçümün hafif üstünde
+        # tutulur; 5,00 TL tavanına kadar geniş pay var ve `degraded` boş geldi, yani
+        # hiçbir doğrulama adımı bütçe yüzünden atlanmadı.
+        ceiling_try=5.00, estimate_try=2.85,
         stages={
             "translate": Stage(GEMINI_GUARD_MODEL, 400),
             "triage":    Stage(GEMINI_GUARD_MODEL, 1200),
