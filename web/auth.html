@@ -21,45 +21,57 @@
 <link rel="icon" type="image/png" href="/static/img/logo.png" sizes="512x512">
 <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/auth.css">
+<script src="/static/i18n.js"></script>
 </head>
 <body>
 
 <div class="auth-wrap">
   <div class="auth-card">
     <h1 class="auth-brand">Premise<span>.</span></h1>
-    <p class="auth-tag">Evidence-based literature search and summarisation tool</p>
+    <p class="auth-tag" data-i18n="auth.tagline">Evidence-based literature search and summarisation tool</p>
+
+    <!-- Dil seçimi en başta: kullanıcı kaydolmadan önce sayfayı kendi dilinde okuyabilsin.
+         Kayıtta bu seçim hesaba yazılır, girişte yalnız bu tarayıcıda saklanır.
+         Seçenek adları çevrilmez: dilini kendi adıyla görmek beklenen davranıştır. -->
+    <label class="fld lang-field">
+      <span data-i18n="lang.label">Interface language</span>
+      <select id="ui-language">
+        <option value="en">English</option>
+        <option value="tr">Türkçe</option>
+      </select>
+    </label>
 
     <div class="seg">
-      <button type="button" id="tab-login" class="on">Sign in</button>
-      <button type="button" id="tab-signup">Create account</button>
+      <button type="button" id="tab-login" class="on" data-i18n="auth.signin">Sign in</button>
+      <button type="button" id="tab-signup" data-i18n="auth.signup">Create account</button>
     </div>
 
     <div class="msg err" id="error" hidden></div>
 
     <form id="form">
       <label class="fld">
-        <span>Email</span>
+        <span data-i18n="auth.email">Email</span>
         <input type="email" id="email" required autocomplete="email" placeholder="jane.doe@example.com">
       </label>
 
       <label class="fld">
-        <span>Password</span>
+        <span data-i18n="auth.password">Password</span>
         <input type="password" id="password" required autocomplete="current-password" minlength="8">
-        <span class="hint" id="pw-hint" hidden>Must be at least 8 characters.</span>
+        <span class="hint" id="pw-hint" data-i18n="auth.pwHint" hidden>Must be at least 8 characters.</span>
       </label>
 
       <label class="fld" id="role-field" hidden>
-        <span>How will you be using it?</span>
+        <span data-i18n="auth.roleLabel">How will you be using it?</span>
         <select id="role">
-          <option value="physician">Physician / researcher</option>
-          <option value="student">Medical / health student</option>
+          <option value="physician" data-i18n="auth.rolePhysician">Physician / researcher</option>
+          <option value="student" data-i18n="auth.roleStudent">Medical / health student</option>
         </select>
-        <span class="hint">Premise is currently open to health professionals and students only.</span>
+        <span class="hint" data-i18n="auth.roleHint">Premise is currently open to health professionals and students only.</span>
       </label>
 
       <label class="consent" id="consent-field" hidden>
         <input type="checkbox" id="consent">
-        <span>
+        <span data-i18n-html="auth.consent">
           I understand that my clinical questions are treated as <b>special-category personal
           data</b>, are sent to language model providers outside my country during search, and
           I <b>explicitly consent</b> to this. My search content stays private to my account;
@@ -73,24 +85,26 @@
         <label>Website <input type="text" id="website" name="website" tabindex="-1" autocomplete="off"></label>
       </div>
 
-      <button type="submit" class="submit" id="submit">Sign in</button>
+      <button type="submit" class="submit" id="submit" data-i18n="auth.signin">Sign in</button>
     </form>
 
     <p class="alt-link" id="forgot-line">
-      <a href="/sifre-sifirla">Forgot password?</a>
+      <a href="/sifre-sifirla" data-i18n="auth.forgot">Forgot password?</a>
     </p>
 
     <p class="foot">
-      Premise is a literature search and summarisation tool. <b>It is not clinical decision
-      support</b>, does not diagnose, and does not recommend treatment. Every generated
-      summary must be verified against the cited articles before it is used in a clinical
-      decision.
+      <span data-i18n-html="auth.foot">
+        Premise is a literature search and summarisation tool. <b>It is not clinical decision
+        support</b>, does not diagnose, and does not recommend treatment. Every generated
+        summary must be verified against the cited articles before it is used in a clinical
+        decision.
+      </span>
       <br><br>
-      <a href="/tanitim">How does Premise work? →</a>
+      <a href="/tanitim" data-i18n="auth.howItWorks">How does Premise work? →</a>
       &nbsp;·&nbsp;
-      <a href="/gizlilik">Privacy policy →</a>
+      <a href="/gizlilik" data-i18n="auth.privacy">Privacy policy →</a>
       &nbsp;·&nbsp;
-      <a href="/kosullar">Terms of use →</a>
+      <a href="/kosullar" data-i18n="auth.terms">Terms of use →</a>
     </p>
   </div>
 </div>
@@ -106,18 +120,28 @@
   const pwHint  = document.getElementById('pw-hint');
   const tabIn   = document.getElementById('tab-login');
   const tabUp   = document.getElementById('tab-signup');
+  const langSel = document.getElementById('ui-language');
+  const t       = (key) => window.I18N.t(key);
 
   let mode = 'login';
 
   // If a session is already active, go straight to the app.
   fetch('/api/me').then(r => { if (r.ok) location.replace('/'); });
 
+  langSel.value = window.I18N.language;
+  langSel.addEventListener('change', () => {
+    // Kayıtta hesaba da yazılır (aşağıda); burada yalnız sayfayı hemen çevirir ve
+    // seçimi bu tarayıcıda saklar, çünkü henüz bir oturum olmayabilir.
+    window.I18N.setLanguage(langSel.value);
+    setMode(mode);                    // gönder düğmesinin metni moda bağlı
+  });
+
   function setMode(next){
     mode = next;
     tabIn.classList.toggle('on', mode === 'login');
     tabUp.classList.toggle('on', mode === 'signup');
     roleFld.hidden = consFld.hidden = pwHint.hidden = (mode === 'login');
-    submit.textContent = mode === 'login' ? 'Sign in' : 'Create account';
+    submit.textContent = t(mode === 'login' ? 'auth.signin' : 'auth.signup');
     pwd.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     errBox.hidden = true;
   }
@@ -141,11 +165,14 @@
     };
     if (mode === 'signup'){
       if (!document.getElementById('consent').checked){
-        return fail('You must give explicit consent to continue.');
+        return fail(t('auth.err.consent'));
       }
       body.role = document.getElementById('role').value;
       body.kvkk_consent = true;
       body.website = document.getElementById('website').value;
+      // Seçilen arayüz dili hesapla birlikte kaydedilir: başka bir cihazdan
+      // girildiğinde de korunsun.
+      body.ui_language = langSel.value;
     }
 
     try {
@@ -158,19 +185,22 @@
       if (!res.ok){
         if (mode === 'signup' && res.status === 409){
           setMode('login');
-          return fail('Something went wrong. If you already have an account, please try signing in.');
+          return fail(t('auth.err.exists'));
         }
         const detail = data.detail;
         return fail(typeof detail === 'string' ? detail
-                    : Array.isArray(detail) ? (detail[0]?.msg || 'Please check your details.')
-                    : 'Something went wrong, please try again.');
+                    : Array.isArray(detail) ? (detail[0]?.msg || t('auth.err.details'))
+                    : t('errors.generic'));
       }
+      // Girişte hesabın dili bu tarayıcıdakinden farklı olabilir; uygulamaya
+      // geçmeden önce hesaptakini yazarız, yoksa bir an eski dille açılır.
+      if (data.ui_language) window.I18N.setLanguage(data.ui_language);
       // A temporary password means a permanent one must be set first; everyone else,
       // including new signups (the app asks them to verify their email), goes straight in.
       const dest = data.must_change_password ? '/hesap' : '/';
       location.replace(dest);
     } catch {
-      fail('Could not reach the server.');
+      fail(t('errors.network'));
     }
   });
 

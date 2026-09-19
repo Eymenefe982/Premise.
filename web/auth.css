@@ -53,3 +53,7 @@
 .alt-link{ margin:16px 0 0; text-align:center; font-size:13px; }
 .alt-link a{ color:var(--accent); }
 .auth-lead{ color:var(--ink-2); font-size:13.5px; line-height:1.6; margin:0 0 20px; }
+
+/* Dil seçimi formdan önce, kartın en üstünde durur. Araya bir ayraç konur: aksi halde
+   giriş formuna ait bir alan sanılıyor ve kaydolmadan önce fark edilmiyordu. */
+.lang-field{ padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--border); }
