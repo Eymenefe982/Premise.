@@ -496,6 +496,18 @@ def _worker(job_id: str, req: SearchRequest, user_id: int, reserved: int) -> Non
             # (bkz. meter.py); rezerve edilen tavanla arasındaki fark iade edilir.
             charged = int(result.get("usage", {}).get("credits", 0))
         result["credits_charged"] = charged
+        # Aramanın bize gerçek maliyeti yalnızca sonucun gövdesinde duruyordu: ne
+        # arayüzde görünüyor ne de bir yere yazılıyordu, yani mod profillerindeki
+        # `estimate_try` tahminleri ölçümle karşılaştırılamıyordu. Tek satır log,
+        # fiyatlandırma kararının dayanacağı sayıyı erişilebilir kılar.
+        usage = result.get("usage") or {}
+        tokens = usage.get("tokens") or {}
+        log.info("search done: mode=%s cost=%.4f TL (ceiling %.2f) credits=%d "
+                 "tokens in/out=%d/%d cached=%s degraded=%s",
+                 result.get("power_mode"), usage.get("cost_try", 0.0),
+                 usage.get("ceiling_try", 0.0), charged,
+                 tokens.get("in", 0), tokens.get("out", 0),
+                 bool(result.get("cached")), usage.get("degraded") or "-")
         accounts.settle(user_id, reserved, charged, "search", report_id, hold_id=job_id)
 
         user = accounts.by_id(user_id)
