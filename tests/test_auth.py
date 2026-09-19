@@ -140,7 +140,8 @@ def test_cross_site_post_rejected(client, outbox):
     assert res.status_code == 403
 
 
-def test_love_account_unlimited_only_when_verified(client, outbox):
+def test_love_account_unlimited_only_when_verified(client, outbox, monkeypatch):
+    monkeypatch.setattr(accounts, "LOVE_EMAIL", "ozel@example.com")
     love = {**SIGNUP, "email": accounts.LOVE_EMAIL}
     me = client.post("/api/auth/signup", json=love).json()
     assert me["love"] is False and me["credits_left"] is not None
@@ -150,6 +151,16 @@ def test_love_account_unlimited_only_when_verified(client, outbox):
     assert me["love"] is True and me["unlimited"] is True and me["credits_left"] is None
     user = accounts.by_email(love["email"])
     assert accounts.reserve(user["id"], 10_000_000) is True
+
+
+def test_no_special_account_without_the_env_variable(client, outbox, monkeypatch):
+    monkeypatch.setattr(accounts, "LOVE_EMAIL", "")
+    client.post("/api/auth/signup", json=SIGNUP)
+    user = accounts.by_email(SIGNUP["email"])
+    conn().execute("UPDATE users SET email_verified_at = '2026-01-01 00:00:00' WHERE id = ?",
+                   (user["id"],))
+    conn().commit()
+    assert accounts.is_love(accounts.by_id(user["id"])) is False
 
 
 # ------------------------------------------------------------------- krediler

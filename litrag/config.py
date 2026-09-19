@@ -111,7 +111,9 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 # Sınırsız kredili, arayüzde kalp rozetiyle gösterilen özel hesap. Yalnızca e-postası
 # doğrulanmışsa geçerlidir; yoksa bu adresle ilk kaydolan herkes sınırsız kredi alırdı.
-LOVE_EMAIL = os.getenv("LOVE_EMAIL", "elifelifkimelif@gmail.com").strip().lower()
+# Adres yalnızca ortam değişkeninden gelir: depo herkese açık, kişisel bir adres koda
+# yazılmaz. Boşsa özel hesap yoktur.
+LOVE_EMAIL = os.getenv("LOVE_EMAIL", "").strip().lower()
 
 # Render gibi bir ters vekilin arkasında request.client.host vekilin adresidir; bütün
 # kullanıcılar tek IP görünür ve IP başına hız sınırları herkesi birlikte kilitler.
