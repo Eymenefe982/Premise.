@@ -1,7 +1,7 @@
 # Doğrudan bağımlılıklar, test edilmiş sürümlere sabitlenmiştir: her Render deploy'u
 # aynı paketleri kurar. Güncellemeleri Dependabot haftalık PR olarak önerir, CI sınar.
 fastapi==0.141.1
-uvicorn==0.52.4
+uvicorn==0.53.0
 pydantic==2.13.5
 email-validator==2.3.0
 disposable-email-domains==0.0.263
