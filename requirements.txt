@@ -1,6 +1,6 @@
 # Doğrudan bağımlılıklar, test edilmiş sürümlere sabitlenmiştir: her Render deploy'u
 # aynı paketleri kurar. Güncellemeleri Dependabot haftalık PR olarak önerir, CI sınar.
-fastapi==0.141.1
+fastapi==0.142.0
 uvicorn==0.52.4
 pydantic==2.13.5
 email-validator==2.3.0
